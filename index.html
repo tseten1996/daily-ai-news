@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Trends Learning Log</title>
+<style>
+  :root {
+    --bg: #fdfdfc;
+    --text: #1a1a1a;
+    --muted: #666;
+    --accent: #0b6e4f;
+    --card: #f4f4f0;
+    --border: #ddd;
+    --code-bg: #22272e;
+    --code-text: #e6edf3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --text: #e8e8e6;
+      --muted: #9a9a97;
+      --accent: #4cc38a;
+      --card: #1d2026;
+      --border: #33373f;
+      --code-bg: #0d1117;
+      --code-text: #e6edf3;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Georgia, 'Times New Roman', serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+  }
+  .container { max-width: 820px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header h1 { font-size: 2.1rem; margin: 0 0 .35rem; }
+  header p.tagline { color: var(--muted); margin: 0 0 1.5rem; font-style: italic; }
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2.5rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: .95rem;
+  }
+  nav.toc h2 { margin: 0 0 .5rem; font-size: 1rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  nav.toc .toc-date { font-weight: 700; margin-top: .6rem; }
+  nav.toc ul { margin: .25rem 0 .25rem 1.1rem; padding: 0; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  section.day > h2 {
+    font-size: 1.5rem;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: .3rem;
+    margin-top: 3rem;
+  }
+  article.topic {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.4rem 1.5rem;
+    margin: 1.5rem 0;
+  }
+  article.topic h3 { margin-top: 0; font-size: 1.3rem; }
+  article.topic h4 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: .85rem; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--accent); margin: 1.4rem 0 .4rem;
+  }
+  .stamp { font-family: monospace; font-size: .8rem; color: var(--muted); }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: .9rem 1.1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: .86rem;
+    line-height: 1.5;
+  }
+  code { font-family: 'SF Mono', Menlo, Consolas, monospace; }
+  p code, li code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: .08em .35em;
+    border-radius: 4px;
+    font-size: .88em;
+  }
+  article.topic p code, article.topic li code { background: var(--bg); }
+  ol li, ul li { margin-bottom: .45rem; }
+  a { color: var(--accent); }
+  footer { margin-top: 3.5rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>AI Trends Learning Log</h1>
+  <p class="tagline">A self-teaching tutorial site that grows every day — tracking the AI topics, tools, and skills people are actively talking about, and showing you how to learn and build each one yourself.</p>
+</header>
+
+<nav class="toc">
+  <h2>Topics Index (newest first)</h2>
+  <!-- TOC:START -->
+  <div class="toc-date">2026-07-10</div>
+  <ul>
+    <li><a href="#claude-5-family">The Claude 5 Family: Fable 5 &amp; the New "Mythos-Class" Frontier</a></li>
+    <li><a href="#context-engineering">Context Engineering — the AI Skill Everyone Is Learning in 2026</a></li>
+    <li><a href="#local-frontier-llms">Running Frontier-Class Open-Weight LLMs at Home (GLM-5.2, Kimi K2.7, Qwen 3.6)</a></li>
+    <li><a href="#opencode">OpenCode — the Open-Source Terminal Coding Agent Topping the Charts</a></li>
+    <li><a href="#kling-motion-control">Kling 3.0 Motion Control — the Engine Behind TikTok's Viral AI Dance Videos</a></li>
+  </ul>
+  <!-- TOC:END -->
+</nav>
+
+<!-- DAYS:START -->
+
+<section class="day" id="day-2026-07-10">
+<h2>📅 2026-07-10</h2>
+
+<article class="topic" id="claude-5-family">
+<h3>The Claude 5 Family: Fable 5 &amp; the New "Mythos-Class" Frontier</h3>
+<p class="stamp">date added: 2026-07-10</p>
+
+<h4>What it is</h4>
+<p>Anthropic has launched the Claude 5 model family, headlined by <strong>Claude Fable 5</strong> — the first model in a new capability tier Anthropic calls "Mythos-class," positioned <em>above</em> the long-running Opus tier. Fable 5 shares its underlying model with Claude Mythos 5 (a restricted-access variant for approved organizations), while Fable 5 is the generally available version with additional safety measures for dual-use capabilities. The family also includes <strong>Claude Sonnet 5</strong>, a cheaper workhorse model that brings stronger long-run coding, tool use, and debugging, and sits alongside the recently updated <strong>Claude Opus 4.8</strong>.</p>
+<p>Why it matters for learners: model families define what's possible in AI apps for the following year. If you build anything on LLM APIs — agents, chatbots, coding tools — knowing the current model lineup, pricing tiers, and which model to route which task to is a foundational skill.</p>
+
+<h4>Why it's trending</h4>
+<p>Benchmark watchers are calling it the widest frontier gap ever recorded: Fable 5 leads WebDev Arena at 1653 Elo, reportedly 92 points clear of the #2 model, and tops Artificial Analysis's Intelligence Index ahead of GPT-5.5, Claude Opus 4.8, and the just-released Grok 4.5. The "Mythos-class" branding — a tier above Opus, with a separate restricted variant — has also sparked heavy debate on X and Hacker News about tiered access to frontier capability.</p>
+
+<h4>Hands-on tutorial: make your first Claude 5 API call</h4>
+<ol>
+  <li>Create an account at <a href="https://console.anthropic.com">console.anthropic.com</a> and generate an API key (Settings → API Keys). New accounts typically get free trial credits.</li>
+  <li>Install the official Python SDK:
+<pre><code>pip install anthropic</code></pre></li>
+  <li>Export your key so the SDK finds it:
+<pre><code>export ANTHROPIC_API_KEY="sk-ant-..."</code></pre></li>
+  <li>Call the flagship model. The model IDs are <code>claude-fable-5</code> (flagship), <code>claude-opus-4-8</code>, <code>claude-sonnet-5</code>, and <code>claude-haiku-4-5</code> (fast/cheap):
+<pre><code>import anthropic
+
+client = anthropic.Anthropic()
+
+message = client.messages.create(
+    model="claude-fable-5",
+    max_tokens=1024,
+    messages=[
+        {"role": "user",
+         "content": "Explain what makes a Mythos-class model different, in 3 bullets."}
+    ],
+)
+print(message.content[0].text)</code></pre></li>
+  <li><strong>Expected result:</strong> a JSON-backed response object whose <code>content[0].text</code> holds the answer. If you get a 404 on the model name, list available models with <code>client.models.list()</code> and use an ID from that list.</li>
+  <li>Practice model routing — the real skill: send the same prompt to <code>claude-haiku-4-5</code> and <code>claude-fable-5</code>, compare quality and cost, and write a one-line rule for your own projects about which tasks deserve the frontier model. (Reported Opus 4.8 pricing is $5 input / $25 output per million tokens; Haiku is far cheaper — check current pricing at <a href="https://docs.claude.com">docs.claude.com</a>.)</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://www.anthropic.com/news/claude-fable-5-mythos-5">Anthropic: Claude Fable 5 &amp; Mythos 5 announcement</a></li>
+  <li><a href="https://docs.claude.com">Claude API documentation</a></li>
+  <li><a href="https://aitoolsrecap.com/Blog/best-ai-tools-july-2026-updated-rankings">AIToolsRecap: Best AI tools July 2026 rankings</a></li>
+  <li><a href="https://www.buildfastwithai.com/blogs/ai-news-today-july-10-2026">Build Fast with AI: July 10, 2026 news roundup</a></li>
+</ul>
+</article>
+
+<article class="topic" id="context-engineering">
+<h3>Context Engineering — the AI Skill Everyone Is Learning in 2026</h3>
+<p class="stamp">date added: 2026-07-10</p>
+
+<h4>What it is</h4>
+<p>Context engineering is the successor to "prompt engineering": instead of crafting one clever prompt, you architect the <em>entire information environment</em> an AI agent works in — project instructions, memory files, tool access, retrieval, and reusable skills. The mental model: a prompt is what you say once; context is everything the model can see when it acts. In practice it means maintaining files like <code>CLAUDE.md</code> / <code>AGENTS.md</code> in your repos, decomposing problems before handing them to an agent, and packaging repeatable procedures as "skills" the agent can load on demand.</p>
+
+<h4>Why it's trending</h4>
+<p>Anthropic's 2026 agentic coding report and a wave of Hacker News discussion converged on the same conclusion: developers who restructured their workflow around context quality complete tasks dramatically faster than those still treating agents as autocomplete — one widely-shared guide claims good context yields ~40% fewer agent errors and ~55% faster completion. The recurring HN takeaways: workflows matter more than demos, verification is the bottleneck, and "skills beat prompts." Pasting a giant custom prompt into every session is now openly mocked as "2025 tactics."</p>
+
+<h4>Hands-on tutorial: context-engineer one of your own repos</h4>
+<ol>
+  <li>Pick a real project you work on. Any coding agent works for this exercise (Claude Code, OpenCode, Cursor — see the OpenCode entry below).</li>
+  <li>Create an agent instructions file at the repo root. Claude Code reads <code>CLAUDE.md</code>; many other agents read <code>AGENTS.md</code>. Keep it under ~60 lines and only include what the agent can't discover itself:
+<pre><code># CLAUDE.md
+
+## What this project is
+One-paragraph description of purpose and architecture.
+
+## Commands
+- Build: `npm run build`
+- Test: `npm test -- --run` (never watch mode)
+- Lint: `npm run lint`
+
+## Conventions
+- TypeScript strict mode; no `any`.
+- New API routes go in src/routes/, one file per resource.
+
+## Gotchas
+- The dev DB seeds from fixtures/seed.sql — don't edit generated files in src/gen/.</code></pre></li>
+  <li>Test the difference: ask your agent to do a small task in a fresh session <em>before</em> and <em>after</em> adding the file (e.g. "add a health-check endpoint and a test for it"). Count wrong assumptions it makes each time. <strong>Expected result:</strong> with the context file, the agent uses your real commands and conventions instead of guessing.</li>
+  <li>Extract a skill: take one procedure you explain repeatedly (e.g. "how we write DB migrations") and move it into its own markdown file (in Claude Code: <code>.claude/skills/db-migrations/SKILL.md</code> with a one-line description at top). Skills load only when relevant, keeping every session's context lean.</li>
+  <li>Adopt the loop that the 2026 reports say separates fast teams from slow ones: <em>decompose the task → prepare context → let the agent implement → verify the output yourself</em>. Time yourself on one feature; most people find their own bottleneck is step 4, which is where review skills and tests belong.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://www.claudeainews.com/news/anthropic-2026-agentic-coding-report">Anthropic's 2026 coding report: context engineering is the skill that matters</a></li>
+  <li><a href="https://www.shareuhack.com/en/posts/context-engineering-guide-2026">Context Engineering Guide 2026: Beyond Prompting</a></li>
+  <li><a href="https://www.developersdigest.tech/blog/what-hacker-news-gets-right-about-ai-coding-agents-2026">What Hacker News gets right about AI coding agents in 2026</a></li>
+  <li><a href="https://github.com/muratcankoylan/agent-skills-for-context-engineering">GitHub: Agent Skills for Context Engineering</a></li>
+</ul>
+</article>
+
+<article class="topic" id="local-frontier-llms">
+<h3>Running Frontier-Class Open-Weight LLMs at Home (GLM-5.2, Kimi K2.7, Qwen 3.6)</h3>
+<p class="stamp">date added: 2026-07-10</p>
+
+<h4>What it is</h4>
+<p>Open-weight models — LLMs whose weights you can download and run on your own hardware — have reached what used to be frontier territory. The current crop dominating r/LocalLLaMA discussion: <strong>GLM-5.2</strong> (MIT license, 1M-token context, reportedly the first open-weight model to beat GPT-5.5 on SWE-Bench Pro), <strong>Kimi K2.7 Code</strong> (agentic coding specialist with a ~6× faster "HighSpeed" variant), <strong>MiniMax M3</strong> (1M context + native multimodality), <strong>DeepSeek V4 Pro</strong>, and <strong>Qwen 3.6</strong>. The easiest on-ramp remains <a href="https://ollama.com">Ollama</a>, which handles downloading, quantization, and serving with one command.</p>
+
+<h4>Why it's trending</h4>
+<p>Two reasons: capability and control. For the first time, open-weight releases are trading blows with proprietary frontier models on hard coding benchmarks, and they're MIT-licensed — so hobbyists, startups, and privacy-sensitive teams can run "GPT-5.5-class" coding assistance with zero API bills and no data leaving their machine. Every new release this summer (GLM-5.2 in June, Kimi K2.7 on June 12, MiniMax M3 on June 1) has topped Hacker News and r/LocalLLaMA within hours.</p>
+
+<h4>Hands-on tutorial: your first local LLM with Ollama</h4>
+<ol>
+  <li>Install Ollama (macOS/Linux; Windows installer available on the site):
+<pre><code>curl -fsSL https://ollama.com/install.sh | sh</code></pre></li>
+  <li>Size a model to your hardware. Rule of thumb: a 4-bit-quantized model needs roughly <em>half its parameter count</em> in GB of RAM/VRAM (an 8B model ≈ 5 GB, a 30B model ≈ 18 GB). Browse <a href="https://ollama.com/library">ollama.com/library</a> and pick the newest small model from a family above — a Qwen 8B-class model is a safe first choice on a 16 GB machine.</li>
+  <li>Run it (first run downloads the weights — substitute the exact tag you picked from the library page):
+<pre><code>ollama run qwen3</code></pre>
+  You get an interactive chat in your terminal. Try a coding question and note the tokens/sec.</li>
+  <li>Use it as a local API. Ollama serves an OpenAI-compatible endpoint on port 11434, so any tool that talks to OpenAI can point at your machine:
+<pre><code>curl http://localhost:11434/v1/chat/completions -d '{
+  "model": "qwen3",
+  "messages": [{"role": "user", "content": "Write a Python one-liner to reverse a string."}]
+}'</code></pre></li>
+  <li><strong>Expected result:</strong> a JSON response generated entirely on your hardware — unplug the network and it still works. If generation is very slow, pick a smaller model or a stronger quantization (e.g. the <code>:q4</code> variants).</li>
+  <li>Level up: if you have a beefy GPU (24 GB+), try the larger agentic-coding models (Kimi K2.7 Code or GLM-5.2 variants as they land in the library), and point a coding agent like OpenCode (next entry) at your local endpoint — a fully local AI pair programmer.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://www.thundercompute.com/blog/best-open-source-llms">Thunder Compute: Best open-source LLMs (July 2026)</a></li>
+  <li><a href="https://techsy.io/en/blog/best-open-source-llms-2026">TECHSY: Open-source LLM leaderboard, July 2026</a></li>
+  <li><a href="https://ollama.com/library">Ollama model library</a></li>
+  <li><a href="https://pinggy.io/blog/best_open_source_self_hosted_llms_for_coding/">Pinggy: Best self-hosted LLMs for coding in 2026</a></li>
+</ul>
+</article>
+
+<article class="topic" id="opencode">
+<h3>OpenCode — the Open-Source Terminal Coding Agent Topping the Charts</h3>
+<p class="stamp">date added: 2026-07-10</p>
+
+<h4>What it is</h4>
+<p>OpenCode is a free, open-source AI coding agent that lives in your terminal (with desktop and IDE-extension options). You describe what you want in natural language; it plans, edits files, and runs shell commands in your project. It supports 75+ LLM providers — OpenAI, Google, and crucially <em>local models via Ollama</em> — and has a two-mode workflow: <strong>Plan mode</strong> (read-only: it proposes an approach) and <strong>Build mode</strong> (it actually implements). With well over 120K GitHub stars it's become the default answer to "how do I get a Claude-Code-style agent without a subscription."</p>
+
+<h4>Why it's trending</h4>
+<p>July 2026's dev-tool power rankings put OpenCode at #1 — the first shake-up of the category in months. The combination driving it: it's free and open source, it works with cheap or local models, and the plan-then-build loop matches how the "context engineering" crowd (see above) says agents should be used. One caveat making the rounds: Anthropic blocked OpenCode from using Claude models in January 2026, so users pair it with GPT-5.x, Gemini 3.x, or open-weight models instead.</p>
+
+<h4>Hands-on tutorial: ship a change with OpenCode</h4>
+<ol>
+  <li>Install it:
+<pre><code>curl -fsSL https://opencode.ai/install | bash</code></pre>
+  (npm and Homebrew installs are also available — see the docs.)</li>
+  <li>Connect a model provider: run <code>opencode auth login</code> and follow the prompts to add an API key for your chosen provider — or select Ollama to use the local model you set up in the previous entry (no key needed).</li>
+  <li>Launch it inside a real project:
+<pre><code>cd your-project
+opencode</code></pre>
+  First, ask it to initialize project context (this generates an <code>AGENTS.md</code> — context engineering in action):
+<pre><code>/init</code></pre></li>
+  <li>Switch to Plan mode (Tab key toggles modes) and describe a small feature: <em>"Add input validation to the signup form and return helpful error messages."</em> Read the plan it produces; push back in plain English until the plan is right.</li>
+  <li>Toggle back to Build mode and tell it to implement. It will edit files and run commands, asking permission as it goes. <strong>Expected result:</strong> a working diff you can review with <code>git diff</code>.</li>
+  <li>Verify like a professional: run the tests yourself, read every changed line, and commit only when you understand the change. (The agent writes the code; you own it.)</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://opencode.ai/docs/">Official OpenCode documentation</a></li>
+  <li><a href="https://github.com/anomalyco/opencode">OpenCode on GitHub</a></li>
+  <li><a href="https://blog.logrocket.com/ai-dev-tool-power-rankings/">LogRocket: AI dev tool power rankings, July 2026</a></li>
+  <li><a href="https://www.nxcode.io/resources/news/opencode-tutorial-2026">NxCode: OpenCode install &amp; setup guide</a></li>
+</ul>
+</article>
+
+<article class="topic" id="kling-motion-control">
+<h3>Kling 3.0 Motion Control — the Engine Behind TikTok's Viral AI Dance Videos</h3>
+<p class="stamp">date added: 2026-07-10</p>
+
+<h4>What it is</h4>
+<p>Motion Control 3.0 is a feature of the Kling AI video model that does <em>motion transfer</em>: you give it (1) a reference video of a movement — a dance, a gesture — and (2) a single image of a character, and it generates a video of that character performing the movement with physics-accurate motion and a stable identity. The character can be a photo of you, an illustration, a mascot, a pet, or a 3D render. It has two modes: <strong>match video</strong> (full-body choreography, up to 30 seconds) and <strong>match image</strong> (keeps your image's framing with camera movement, up to 10 seconds).</p>
+
+<h4>Why it's trending</h4>
+<p>It's the tool behind the wave of AI dance videos flooding TikTok and Reels this summer — babies doing trending choreography, cats performing viral dances, single photos turned into full dance clips. Tutorial content for the trend ("photo → viral dancing masterpiece") is itself going viral, and the 3.0 release's physics accuracy removed the uncanny jitter that made earlier motion-transfer clips easy to spot.</p>
+
+<h4>Hands-on tutorial: turn a photo into a dance video</h4>
+<ol>
+  <li>Create an account at <a href="https://klingai.com">klingai.com</a> (web) or the Kling AI mobile app. Free tiers with daily credits exist; video generation consumes credits per clip.</li>
+  <li>Prepare your two inputs:
+    <ul>
+      <li><strong>Character image:</strong> a clear, well-lit photo showing head, shoulders, and torso, ideally in a neutral standing pose. Frame-1 quality is the biggest predictor of success.</li>
+      <li><strong>Reference motion clip:</strong> a 3–30 second video of the dance/movement — clean lighting, a single full-body subject. (Screen-record or save a trending dance clip, or film yourself doing it.)</li>
+    </ul></li>
+  <li>Open the Motion Control tool, upload the reference video first, then the character image, and confirm the face/body binding it detects.</li>
+  <li>Choose <em>match video</em> for full choreography, then generate. Expect a few minutes of processing.</li>
+  <li><strong>Expected result:</strong> a video of your character performing the reference dance. If limbs glitch, re-try with a cleaner reference clip or a more neutral starting pose in the photo.</li>
+  <li>Make it post-ready: keep it 5–8 seconds (loops perform best), add the trending audio in CapCut or TikTok's editor, and lean into surprising contrast (unexpected subject × serious choreography) — that combination is the trend's whole formula.</li>
+  <li><strong>Label it as AI.</strong> Platforms including TikTok require AI-generated content to be disclosed — use the built-in "AI-generated" toggle when posting, and only use images of people who've consented.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://alici.ai/blog/kling-motion-control-guide">How to use Kling 3 Motion Control: complete guide (2026)</a></li>
+  <li><a href="https://kling3.io/motion-control-3-0">Kling Motion Control 3.0: physics-accurate motion transfer</a></li>
+  <li><a href="https://www.eweek.com/news/ai-photo-editing-trends-2026/">eWeek: 8 viral AI photo/video editing trends for 2026</a></li>
+</ul>
+</article>
+
+</section>
+
+<!-- DAYS:END -->
+
+<footer>
+  <p>This log is updated automatically by a daily AI research task. Each entry records what was trending on that date, with sources — treat pricing, benchmarks, and version numbers as snapshots in time. Total topics: <span id="topic-count">5</span>.</p>
+</footer>
+
+</div>
+</body>
+</html>
