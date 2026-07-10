@@ -302,7 +302,7 @@
         <h2>The Agentic Systems Field Manual</h2>
         <p>A 16-module, principal-level path through agentic AI — build it, apply it, consult on it. Labs, failure modes, and three-track code in every module.</p>
       </span>
-      <span class="mb-status"><b>M00–M01 PUBLISHED</b><br>14 QUEUED · OPEN →</span>
+      <span class="mb-status"><b>M00–M02 PUBLISHED</b><br>13 QUEUED · OPEN →</span>
     </a>
   </div>
   <div class="toolbar">
@@ -353,6 +353,116 @@
      data-hue (0-360), data-blurb.
      ====================================================================== -->
 <main id="articles">
+
+<article class="topic" id="gpt-56-sol-terra-luna"
+  data-title="GPT-5.6 Sol, Terra &amp; Luna: OpenAI's Three-Tier Family Lands in Limited Preview"
+  data-date="2026-07-10" data-tag="Models" data-emoji="🌗" data-hue="35"
+  data-blurb="OpenAI's answer to the Claude 5 family: a flagship, a workhorse, and a budget tier — launched under an unusual government-coordinated limited preview. What to prepare before GA.">
+<p class="stamp">date added: 2026-07-10</p>
+
+<h4>What it is</h4>
+<p>OpenAI announced the <strong>GPT-5.6 series</strong> on July 9: <strong>Sol</strong> (flagship — complex coding, research, cybersecurity, computer use), <strong>Terra</strong> (balanced capability/speed/cost for everyday work), and <strong>Luna</strong> (fastest and cheapest). Reported pricing per million tokens: Sol $5 in / $30 out, Terra $2.50 in / $15 out, Luna $1 in / $6 out. The release also ships <em>programmatic tool calling</em> in the Responses API and more predictable prompt caching, including explicit cache breakpoints with a 30-minute minimum cache life.</p>
+<p>The unusual part: as part of OpenAI's engagement with the U.S. government, availability starts as a <strong>limited preview for a small group of trusted partners</strong> (whose participation was shared with the government), with general availability promised "in the coming weeks."</p>
+
+<h4>Why it's trending</h4>
+<p>Two storylines collided. First, the three-tier naming (sun/earth/moon) mirrors the industry-wide shift to explicit capability tiers — the same week the Claude 5 family's tiering was still dominating benchmark chatter (see the Claude 5 entry below). Second, the government-coordinated limited preview is a first for a mainline GPT release and set off intense debate about what "voluntary frontier standards" will mean for API access going forward — the White House is reportedly finalizing exactly such standards with OpenAI, Google, and Anthropic.</p>
+
+<h4>Hands-on tutorial: build a routing shim now so GA is a one-line change</h4>
+<p>You likely can't call GPT-5.6 yet — so the useful move today is making sure no model ID is hard-coded anywhere in your projects, and having an A/B harness ready for launch day.</p>
+<ol>
+  <li>Centralize model selection behind one function and an env var, instead of scattering IDs through your code:
+<pre><code># routing.py
+import os
+
+TIERS = {
+    # update these IDs the day GA lands — one place, not fifty
+    "flagship": os.getenv("MODEL_FLAGSHIP", "your-current-flagship-id"),
+    "workhorse": os.getenv("MODEL_WORKHORSE", "your-current-default-id"),
+    "budget":   os.getenv("MODEL_BUDGET", "your-current-cheap-id"),
+}
+
+def model_for(task_kind: str) -> str:
+    routing = {"deep_reasoning": "flagship", "everyday": "workhorse",
+               "classify_extract": "budget"}
+    return TIERS[routing.get(task_kind, "workhorse")]</code></pre></li>
+  <li>Verify what your account can actually see — never trust blog posts for model IDs:
+<pre><code>from openai import OpenAI
+client = OpenAI()
+for m in client.models.list():
+    print(m.id)</code></pre></li>
+  <li>Write a 10-prompt eval file (your real tasks, one per line) and a script that runs it against any two tier IDs and prints cost + latency + your own 1–5 quality score. When GA arrives, run it: the published pricing means Terra costs half of Sol — the question a routing table answers is which of <em>your</em> tasks can't tell the difference.</li>
+  <li><strong>Expected result:</strong> the day GPT-5.6 goes GA, adopting it is three env-var changes plus one eval run — not a code hunt.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://openai.com/index/previewing-gpt-5-6-sol/">OpenAI: Previewing GPT-5.6 Sol</a></li>
+  <li><a href="https://help.openai.com/en/articles/20001325-a-preview-of-gpt-56-sol-terra-and-luna">OpenAI Help Center: GPT-5.6 Sol, Terra and Luna preview</a></li>
+  <li><a href="https://deploymentsafety.openai.com/gpt-5-6-preview">GPT-5.6 Preview System Card</a></li>
+  <li><a href="https://www.marktechpost.com/2026/07/09/openai-releases-gpt-5-6-a-three-tier-model-family-with-programmatic-tool-calling/">MarkTechPost: three-tier family with programmatic tool calling</a></li>
+</ul>
+</article>
+
+<article class="topic" id="kimi-k27-copilot"
+  data-title="Kimi K2.7 Code in GitHub Copilot: the First Open-Weight Model in the Picker"
+  data-date="2026-07-10" data-tag="Coding" data-emoji="🔓" data-hue="205"
+  data-blurb="For the first time, Copilot's model picker includes a model whose full weights you can download — MIT-licensed, 1T-parameter MoE, hosted on Azure. How to enable and evaluate it.">
+<p class="stamp">date added: 2026-07-10</p>
+
+<h4>What it is</h4>
+<p>On July 1, GitHub made Moonshot AI's <strong>Kimi K2.7 Code</strong> generally available in the GitHub Copilot model picker — the first <em>open-weight</em> model ever offered there; every other selectable model is proprietary. The model is MIT-licensed with its full 1-trillion-parameter mixture-of-experts weights public on Hugging Face, while GitHub runs a hosted copy on Microsoft Azure for Copilot users, billed at provider list pricing under usage-based billing. Rollout started with Copilot Pro, Pro+, and Max; on July 7 it reached <strong>Business and Enterprise</strong>, where it is <em>off by default</em> until an administrator enables the policy.</p>
+
+<h4>Why it's trending</h4>
+<p>It cracks open two walls at once. Ideologically: the "open weights can't compete on managed coding assistants" assumption just lost its main counterexample — a Beijing-built MIT model now sits in the same dropdown as the frontier labs' flagships. Practically: the MoE architecture activates only a fraction of its parameters per token, so it undercuts proprietary peers on price, and enterprises get a new audit story — you can inspect, self-host, or fine-tune the exact weights Copilot is serving you. The Hacker News debate has been running all week on whether this is open-source AI's mainstream moment or just Microsoft hedging.</p>
+
+<h4>Hands-on tutorial: enable it and run a real comparison</h4>
+<ol>
+  <li>Check your plan. Individual plans (Pro/Pro+/Max): the model appears in Copilot Chat's model picker directly. Business/Enterprise: an org admin must first enable the Kimi K2.7 policy (Copilot policies in org settings) — it's off by default.</li>
+  <li>In your editor's Copilot Chat, open the model picker and select <strong>Kimi K2.7 Code</strong>. Note that usage is billed as premium requests at the provider's list-price multiplier — check your plan's included allowance before benchmarking heavily.</li>
+  <li>Pick one real refactor from your current backlog (not a toy). Run it twice in fresh chats: once on your usual default model, once on Kimi K2.7 Code. Compare: correctness of the diff, how many follow-up corrections each needed, and premium-request cost.</li>
+  <li>Form your own verdict on the open-weight tradeoff: same task, weights-available model vs. proprietary. <strong>Expected result:</strong> a concrete, personal data point on whether the price/auditability advantage costs you quality — most published comparisons say "close on routine coding, behind on hard debugging," but your codebase is the benchmark that matters.</li>
+  <li>Bonus (ties into the local LLM entry below): the same K2.7 weights are on Hugging Face — teams with strict data policies can run the identical model fully offline and keep the Copilot UX for everything else.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://github.blog/changelog/2026-07-01-kimi-k2-7-is-now-available-in-github-copilot/">GitHub Changelog: Kimi K2.7 Code generally available in Copilot</a></li>
+  <li><a href="https://github.blog/changelog/2026-07-07-kimi-k2-7-now-available-for-copilot-business-and-enterprise/">GitHub Changelog: Business &amp; Enterprise rollout (admin policy)</a></li>
+  <li><a href="https://www.techtimes.com/articles/319556/20260702/open-weight-ai-enters-github-copilot-kimi-k27-code-costs-less-audits-differently.htm">TechTimes: costs less, audits differently</a></li>
+</ul>
+</article>
+
+<article class="topic" id="pocket-tts"
+  data-title="Pocket TTS: Voice Cloning From 5 Seconds of Audio, on a CPU"
+  data-date="2026-07-10" data-tag="Audio" data-emoji="🎙️" data-hue="330"
+  data-blurb="Kyutai's 100M-parameter, MIT-licensed TTS clones a voice — tone, accent, even room acoustics — from a 5-second sample and runs 6× real-time with no GPU. Local voice is suddenly easy.">
+<p class="stamp">date added: 2026-07-10</p>
+
+<h4>What it is</h4>
+<p><strong>Pocket TTS</strong> is Kyutai's 100-million-parameter text-to-speech model (90M causal transformer + 10M codec decoder, plus an 18M voice encoder used once per sample) that does zero-shot voice cloning from roughly <strong>5 seconds of reference audio</strong> — capturing tone, emotion, accent, cadence, and even the room's reverb — while running about <strong>6× faster than real-time on an ordinary CPU</strong>. The team tested GPU acceleration and found no speedup over CPU execution; it's genuinely CPU-native. MIT-licensed, trained on 88k hours of public English datasets (GigaSpeech, VoxPopuli, LibriHeavy, Emilia, and others).</p>
+
+<h4>Why it's trending</h4>
+<p>It's been climbing r/LocalLLaMA hard this week (benchmarked against Kokoro, Supertonic, and Inflect-Nano in community tests) because it flips the default assumption about voice cloning: until now, cloning meant streaming audio to someone's servers. A laptop-class, fully local model changes the calculus for privacy-sensitive uses — medical dictation, legal work, personal assistants — and pairs naturally with the local open-weight LLMs covered earlier on this board: a fully offline talking assistant is now a weekend project, not a research effort.</p>
+
+<h4>Hands-on tutorial: clone your own voice locally</h4>
+<ol>
+  <li>Clone the repo and follow its quickstart (the README is the source of truth for the current install command — the project moves fast):
+<pre><code>git clone https://github.com/kyutai-labs/pocket-tts
+cd pocket-tts
+# then run the install + quickstart commands from the README</code></pre></li>
+  <li>Record a reference sample of your own voice: 5–10 seconds of natural speech, WAV format, quiet room. On most systems: <code>ffmpeg -f avfoundation</code>/<code>alsa</code>, or just use your phone's voice memo app and transfer the file.</li>
+  <li>Run the README's synthesis example with your sample as the voice reference and a paragraph of text you did <em>not</em> record. Play the result.</li>
+  <li>Measure the real-time factor: time the generation of a 60-second paragraph. <strong>Expected result:</strong> generation completes in roughly 10 seconds on a recent laptop CPU (≈6× real-time), and the output audibly carries your tone and accent — including, slightly eerily, the acoustics of the room you recorded in.</li>
+  <li>Ethics check worth doing deliberately: try cloning from a 5-second clip of a public figure's speech, notice how well it works, and then read the license and your local law on voice likeness — this capability being a local commodity is exactly why consent norms around voice are tightening.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://github.com/kyutai-labs/pocket-tts">GitHub: kyutai-labs/pocket-tts</a></li>
+  <li><a href="https://kyutai-labs.github.io/pocket-tts/">Pocket TTS demo page</a></li>
+  <li><a href="https://ostechnix.com/pocket-tts-local-text-to-speech-no-gpu/">OSTechNix: local voice cloning without a GPU</a></li>
+</ul>
+</article>
 
 <article class="topic" id="claude-5-family"
   data-title="The Claude 5 Family: Fable 5 &amp; the New “Mythos-Class” Frontier"
