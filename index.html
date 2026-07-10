@@ -12,6 +12,12 @@
     data-emoji, data-hue (0-360), and data-blurb attributes. Never delete old articles.
   - The bookmark board (cards, date groups, filters, counts) is generated automatically
     by the script at the bottom. There is no separate TOC to maintain.
+  - THE FIELD MANUAL: a second content stream lives in /manual — a 16-module curriculum
+    ("The Agentic Systems Field Manual"). Each daily run also writes the next queued
+    module as manual/module-NN.html and updates statuses in manual/index.html (the
+    dependency graph node class queued→published, its href to the module file, and the
+    matching site-map card status). See SCHEDULED_TASK_PROMPT.md at the repo root for
+    the full daily-run specification.
 -->
 <style>
   :root {
@@ -77,6 +83,39 @@
     transform: translateY(-.2rem);
   }
   header.site p.tagline { margin: .4rem 0 0; color: var(--muted); max-width: 62ch; }
+
+  /* ---------- Field Manual banner ---------- */
+  .manual-banner {
+    display: flex; align-items: center; gap: 1.1rem;
+    margin: 0 0 1.6rem;
+    padding: 1.05rem 1.3rem;
+    background: var(--surface);
+    border: 1.6px solid var(--text);
+    border-radius: 14px;
+    text-decoration: none; color: var(--text);
+    box-shadow: var(--shadow);
+    background-image:
+      linear-gradient(rgba(14, 99, 208, .05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(14, 99, 208, .05) 1px, transparent 1px);
+    background-size: 22px 22px;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .manual-banner:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+  .manual-banner .mb-emoji { font-size: 2.1rem; flex: none; }
+  .manual-banner .mb-kicker {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .66rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .manual-banner h2 { margin: .15rem 0 .2rem; font-size: 1.12rem; letter-spacing: -.01em; }
+  .manual-banner p { margin: 0; font-size: .85rem; color: var(--muted); }
+  .manual-banner .mb-status {
+    margin-left: auto; flex: none; text-align: right;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .68rem; color: var(--muted); line-height: 1.7;
+  }
+  .manual-banner .mb-status b { color: var(--accent); }
+  @media (max-width: 620px) { .manual-banner .mb-status { display: none; } }
 
   /* ---------- Toolbar: search + tag chips ---------- */
   .toolbar {
@@ -256,6 +295,15 @@
       </div>
       <p class="tagline">A bookmark board of the AI topics, tools, and skills people are actively talking about — updated daily. Click any bookmark to open its full explainer and hands-on tutorial.</p>
     </header>
+    <a class="manual-banner" href="manual/index.html">
+      <span class="mb-emoji">📐</span>
+      <span>
+        <span class="mb-kicker">New · Structured Curriculum · One Module Ships Daily</span>
+        <h2>The Agentic Systems Field Manual</h2>
+        <p>A 16-module, principal-level path through agentic AI — build it, apply it, consult on it. Labs, failure modes, and three-track code in every module.</p>
+      </span>
+      <span class="mb-status"><b>M00 PUBLISHED</b><br>15 QUEUED · OPEN →</span>
+    </a>
   </div>
   <div class="toolbar">
     <div class="wrap toolbar-inner">

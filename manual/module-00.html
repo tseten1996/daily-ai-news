@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 00 — Mental Models: What an Agent Actually Is · Agentic Systems Field Manual</title>
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  /* Top bar */
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  /* Figures */
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  /* Code tabs */
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  /* Judgment call sidebar */
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  /* Failure modes */
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  /* Tables */
+  .tbl-wrap { overflow-x: auto; margin: 1.4rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; background: var(--panel); }
+  th {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    text-align: left; color: var(--muted);
+    border-bottom: 2px solid var(--ink);
+    padding: .55rem .7rem;
+  }
+  td { border-bottom: 1px solid var(--border); padding: .6rem .7rem; vertical-align: top; }
+  td:first-child { font-weight: 700; white-space: nowrap; }
+
+  /* Lab / checklist blocks */
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← Field Manual</a>
+  <span>AGENTIC SYSTEMS FIELD MANUAL · MODULE 00 / 15</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">FM-00 · Foundations</div>
+  <h1>Mental Models: What an Agent Actually Is</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">The honest definition, the workflow-vs-agent taxonomy, the autonomy spectrum, and the bitter lesson — the four mental models every other module builds on.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-10</b></span>
+    <span>DEPTH <b>~4,500 words</b></span>
+    <span>PREREQS <b>none</b></span>
+    <span>LAB <b>build a no-framework agent</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§ 0.0</span> Orientation</h2>
+<p>Most confusion about agentic systems traces back to fuzzy definitions. "Agent" gets used for everything from an autocomplete feature to a fleet of autonomous processes, and architecture debates go in circles because the participants are picturing different things. This module fixes the vocabulary. By the end you should be able to look at any "AI agent" — a product, a framework demo, a vendor pitch — and answer three questions precisely: <em>where does control flow live, what can it actually do, and what happens when it's wrong?</em></p>
+<p>Everything else in this manual — context engineering, MCP, harnesses, multi-agent systems, evals — is elaboration on the four models in this module.</p>
+
+<h2><span class="sec">§ 0.1</span> The agent loop: LLM + tools + loop</h2>
+<p>Strip away the branding and an agent is this: <strong>a language model, given a set of tools, called in a loop, where the model's output determines what happens next.</strong> Each iteration: assemble context → run inference → if the model requested a tool, execute it and append the result to context → repeat until the model produces a final answer (or a guard stops it).</p>
+<p>The classic framing — perceive → reason → act → observe — maps directly onto engineering artifacts. <em>Perceive</em> is context assembly (system prompt, conversation, tool results, retrieved data). <em>Reason</em> is a single inference pass. <em>Act</em> is your code executing a tool call. <em>Observe</em> is appending the tool's output back into context. There is no additional magic layer; if you can read a <code>while</code> loop, you can read an agent.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 300" role="img" aria-label="The agent loop: context assembly feeds the model, the model either stops or requests a tool; tool results are appended back into context.">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <!-- Context box -->
+  <rect x="20" y="90" width="200" height="120" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="120" y="118" text-anchor="middle" class="svg-label" font-size="12" font-weight="700" fill="var(--ink)">CONTEXT</text>
+  <text x="120" y="140" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">system prompt</text>
+  <text x="120" y="156" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">conversation history</text>
+  <text x="120" y="172" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">tool results so far</text>
+  <text x="120" y="188" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">(perceive)</text>
+  <!-- Model box -->
+  <rect x="300" y="105" width="170" height="90" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.5"/>
+  <text x="385" y="140" text-anchor="middle" class="svg-label" font-size="12" font-weight="700" fill="var(--ink)">MODEL</text>
+  <text x="385" y="160" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">one inference pass</text>
+  <text x="385" y="176" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">(reason + decide)</text>
+  <!-- Decision -->
+  <path d="M560 150 L620 105 L680 150 L620 195 Z" fill="none" stroke="var(--ink)" stroke-width="1.5"/>
+  <text x="620" y="146" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--ink)">tool call</text>
+  <text x="620" y="160" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--ink)">requested?</text>
+  <!-- Final -->
+  <rect x="730" y="112" width="130" height="76" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="795" y="145" text-anchor="middle" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">FINAL</text>
+  <text x="795" y="162" text-anchor="middle" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">RESPONSE</text>
+  <!-- Tool executor -->
+  <rect x="430" y="230" width="270" height="52" rx="6" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="565" y="252" text-anchor="middle" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">TOOL EXECUTOR — deterministic code</text>
+  <text x="565" y="269" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">validate args → run → capture output or error (act)</text>
+  <!-- Guards -->
+  <rect x="300" y="20" width="170" height="44" rx="6" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="385" y="38" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--warn)">GUARDS</text>
+  <text x="385" y="53" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">max turns · budget · timeouts</text>
+  <!-- Arrows -->
+  <line x1="220" y1="150" x2="295" y2="150" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="470" y1="150" x2="555" y2="150" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="680" y1="150" x2="725" y2="150" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="700" y="140" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">no</text>
+  <path d="M620 195 L620 256 L705 256" fill="none" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arr)" transform="translate(0,0)"/>
+  <text x="636" y="215" class="svg-label" font-size="10" fill="var(--muted)">yes</text>
+  <path d="M430 256 L120 256 L120 215" fill="none" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="270" y="248" text-anchor="middle" class="svg-label" font-size="10" fill="var(--muted)">observation appended to context (observe)</text>
+  <line x1="385" y1="64" x2="385" y2="100" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+</svg>
+<figcaption><b>FIG 0.1</b> — The agent loop. Control flow: context feeds one inference pass; the model either finishes or requests a tool; the executor runs deterministic code and appends the observation back into context. Guards (max turns, token budget, timeouts) sit outside the model's control — they are yours.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  C[Context: system prompt + history + tool results] --> M[Model: one inference pass]
+  G[Guards: max turns, budget, timeouts] -.-> M
+  M --> D{tool call requested?}
+  D -- no --> F[Final response]
+  D -- yes --> T[Tool executor: deterministic code]
+  T -- observation appended --> C</pre>
+</details>
+</figure>
+
+<p>The loop has exactly one property that makes it different from every other system you've built: <strong>control flow is decided at runtime, by a probabilistic component.</strong> That single property is the source of all agentic power (it handles paths you didn't enumerate) and of every failure mode in this manual (it takes paths you didn't intend). Hold onto that framing — most of the remaining fifteen modules are techniques for keeping the benefit while capping the damage.</p>
+
+<h3>The whole thing in code</h3>
+<p>Here is a complete, working agent — no framework. The Python track shows the raw loop, which you should write at least once in your life; the TypeScript track uses the Claude Agent SDK, where the loop, tools, and permissions come pre-built as a harness; the Java track uses Spring AI, which runs the tool loop inside the framework. All three are the same diagram from FIG 0.1.</p>
+
+<div class="code-tabs">
+  <div class="tab-row" role="tablist">
+    <button class="tab-btn active" role="tab">Python — raw SDK, no framework</button>
+    <button class="tab-btn" role="tab">TypeScript — Claude Agent SDK</button>
+    <button class="tab-btn" role="tab">Java — Spring AI</button>
+  </div>
+  <div class="tab-panel">
+<pre><code># pip install anthropic
+import anthropic
+
+client = anthropic.Anthropic()
+
+TOOLS = [{
+    "name": "read_file",
+    "description": "Read a UTF-8 text file and return its contents.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"path": {"type": "string", "description": "Relative file path"}},
+        "required": ["path"],
+    },
+}]
+
+def read_file(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()[:20_000]
+    except OSError as e:
+        # Errors are observations, not exceptions: the model sees them and adapts.
+        return f"ERROR: {e}"
+
+messages = [{"role": "user", "content": "Summarize README.md in 3 bullets."}]
+
+MAX_TURNS = 8                      # guard: the model never controls this
+for _ in range(MAX_TURNS):
+    resp = client.messages.create(
+        model="claude-sonnet-5",
+        max_tokens=2048,
+        system="You are a careful engineering assistant. Use tools when needed.",
+        tools=TOOLS,
+        messages=messages,
+    )
+    messages.append({"role": "assistant", "content": resp.content})
+    if resp.stop_reason != "tool_use":
+        break                      # the model chose to stop — the loop's only soft exit
+    results = []
+    for block in resp.content:
+        if block.type == "tool_use":
+            output = read_file(**block.input)
+            results.append({"type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": output})
+    messages.append({"role": "user", "content": results})
+
+print(resp.content[-1].text)</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code>// npm install @anthropic-ai/claude-agent-sdk
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+// The SDK ships the loop from FIG 0.1 as a production harness:
+// context assembly, a built-in tool belt (Read, Bash, Grep, ...),
+// permission gating, and session persistence are already there.
+for await (const message of query({
+  prompt: "Summarize README.md in 3 bullets.",
+  options: {
+    allowedTools: ["Read"],   // constrain the action space (see §0.2)
+    maxTurns: 8,              // same guard as the Python loop
+  },
+})) {
+  if (message.type === "result") console.log(message.result);
+}</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code>// Spring AI — the framework runs the tool loop internally.
+@Component
+class FileTools {
+    @Tool(description = "Read a UTF-8 text file and return its contents")
+    String readFile(String path) throws IOException {
+        return Files.readString(Path.of(path));
+    }
+}
+
+// The .tools(...) call registers the schema; ChatClient loops on
+// tool_use responses until the model produces a final answer.
+String answer = ChatClient.create(chatModel)
+        .prompt("Summarize README.md in 3 bullets.")
+        .tools(new FileTools())
+        .call()
+        .content();</code></pre>
+  </div>
+</div>
+
+<p>Read the Python version closely, because three of its lines carry most of the discipline: the <code>MAX_TURNS</code> guard (the model must never own its own termination), the <code>ERROR:</code> return inside the tool (tool failures are <em>observations the model can react to</em>, not exceptions that kill the loop), and the truncation at 20k characters (every tool output is a context-budget decision — Module 4).</p>
+
+<div class="failure">
+<div class="hd">Failure modes — the agent loop</div>
+<ol>
+  <li><strong>Unbounded looping / goal drift.</strong> The model keeps acting without converging — re-reading files, retrying variations, "one more check." Mitigation: hard turn caps, token budgets, and a progress heuristic (if the last N observations are near-duplicates, stop). Never rely on the model to notice it's stuck.</li>
+  <li><strong>Error spirals.</strong> A failing tool call gets retried with the same arguments forever. Mitigation: return <em>instructive</em> error messages (an error message is a prompt — "file not found; directory listing: […]" beats "ENOENT"), and cap identical retries in the executor.</li>
+  <li><strong>Context flooding.</strong> A tool returns 400KB of JSON and every subsequent inference pays for it — cost balloons and reasoning quality degrades (context rot, Module 4). Mitigation: truncate, paginate, and summarize at the tool boundary.</li>
+  <li><strong>Premature stop.</strong> The model answers confidently without calling any tool — plausible text, zero grounding. Mitigation: instructions alone are weak; verify outputs against the trajectory (did it actually read the file it's citing?) — Module 11.</li>
+  <li><strong>Silent misuse.</strong> Arguments pass the JSON schema but are semantically wrong (<code>path: "/etc/passwd"</code>). Schema validation is necessary, not sufficient — pair it with allowlists and permission gates (Modules 9, 12).</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — who owns the loop?</div>
+<p>The loop is 40 lines; nobody needs a framework for it. The real question is who owns the <em>harness</em> around the loop — permissions, sandboxing, tracing, retries, session resume, cost caps. That's thousands of lines of undifferentiated engineering.</p>
+<p>My rule: if the agent <em>is</em> your product (you're selling the agent experience), own the loop and build the harness deliberately — you'll need control over every layer. If the agent <em>augments</em> your product or your team's workflow, adopt a harness (Claude Agent SDK, or Claude Code itself for internal work) and spend your innovation budget on tools, context, and evals instead. Teams that hand-roll harnesses for internal agents are usually rebuilding permission gating badly, six months at a time.</p>
+</aside>
+
+<h2><span class="sec">§ 0.2</span> Workflows vs. agents: the taxonomy that prevents overbuilding</h2>
+<p>Anthropic's "Building Effective Agents" essay drew the industry's most useful line: <strong>workflows</strong> are systems where <em>your code</em> decides the path and the model fills in steps; <strong>agents</strong> are systems where <em>the model</em> decides the path. Between "one prompt" and "full agent" sit five workflow patterns that solve most real problems at a fraction of the cost and risk. Senior engineers overbuild here more than anywhere else.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 560" role="img" aria-label="Five workflow patterns: prompt chaining, routing, parallelization, orchestrator-workers, evaluator-optimizer.">
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <!-- helper: row labels at x=20 -->
+  <!-- 1. Prompt chaining -->
+  <text x="20" y="48" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">1 · PROMPT CHAINING</text>
+  <rect x="230" y="28" width="110" height="34" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="285" y="49" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">LLM step A</text>
+  <rect x="400" y="28" width="70" height="34" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="435" y="49" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">gate ✓</text>
+  <rect x="530" y="28" width="110" height="34" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="585" y="49" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">LLM step B</text>
+  <rect x="700" y="28" width="110" height="34" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="755" y="49" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">LLM step C</text>
+  <line x1="340" y1="45" x2="395" y2="45" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="470" y1="45" x2="525" y2="45" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="640" y1="45" x2="695" y2="45" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <!-- 2. Routing -->
+  <text x="20" y="150" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">2 · ROUTING</text>
+  <path d="M250 130 L305 105 L360 130 L305 155 Z" fill="none" stroke="var(--ink)" stroke-width="1.3"/>
+  <text x="305" y="134" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">classifier</text>
+  <rect x="470" y="88" width="150" height="30" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="545" y="107" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">refunds handler</text>
+  <rect x="470" y="128" width="150" height="30" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="545" y="147" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">tech-support handler</text>
+  <rect x="470" y="168" width="150" height="30" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="545" y="187" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">fallback → human</text>
+  <line x1="360" y1="123" x2="465" y2="103" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="360" y1="130" x2="465" y2="143" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="360" y1="140" x2="465" y2="180" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <!-- 3. Parallelization -->
+  <text x="20" y="270" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">3 · PARALLELIZATION</text>
+  <rect x="230" y="250" width="90" height="34" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="275" y="271" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">fan-out</text>
+  <rect x="400" y="216" width="120" height="28" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="460" y="234" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">worker · lens 1</text>
+  <rect x="400" y="254" width="120" height="28" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="460" y="272" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">worker · lens 2</text>
+  <rect x="400" y="292" width="120" height="28" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="460" y="310" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">worker · lens 3</text>
+  <rect x="600" y="250" width="150" height="34" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="675" y="271" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">aggregate / vote</text>
+  <line x1="320" y1="260" x2="395" y2="232" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="320" y1="267" x2="395" y2="268" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="320" y1="276" x2="395" y2="304" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="520" y1="232" x2="595" y2="260" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="520" y1="268" x2="595" y2="267" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="520" y1="306" x2="595" y2="276" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <!-- 4. Orchestrator-workers -->
+  <text x="20" y="392" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">4 · ORCHESTRATOR-WORKERS</text>
+  <rect x="260" y="370" width="130" height="36" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.5"/><text x="325" y="388" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--ink)">orchestrator LLM</text>
+  <text x="325" y="400" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">decomposes at runtime</text>
+  <rect x="470" y="352" width="120" height="28" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="530" y="370" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">subtask worker</text>
+  <rect x="470" y="390" width="120" height="28" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="530" y="408" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">subtask worker</text>
+  <rect x="660" y="370" width="130" height="36" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="725" y="392" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">synthesize</text>
+  <line x1="390" y1="380" x2="465" y2="366" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="390" y1="392" x2="465" y2="404" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="590" y1="366" x2="655" y2="380" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <line x1="590" y1="404" x2="655" y2="392" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <!-- 5. Evaluator-optimizer -->
+  <text x="20" y="505" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">5 · EVALUATOR-OPTIMIZER</text>
+  <rect x="280" y="480" width="130" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="345" y="504" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">generator LLM</text>
+  <rect x="540" y="480" width="150" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="615" y="498" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">evaluator</text>
+  <text x="615" y="512" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">rubric or deterministic checks</text>
+  <path d="M410 490 L535 490" fill="none" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <path d="M535 512 L410 512" fill="none" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+  <text x="472" y="483" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">draft</text>
+  <text x="472" y="528" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">critique (capped iterations)</text>
+  <rect x="740" y="480" width="90" height="40" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="785" y="504" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">accept</text>
+  <line x1="690" y1="500" x2="735" y2="500" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#arr2)"/>
+</svg>
+<figcaption><b>FIG 0.2</b> — The five workflow patterns. In every one, the boxes-and-arrows are <em>your code</em>; the model only fills in the boxes. The moment the model chooses which box comes next, you have an agent.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source (orchestrator-workers example)</summary>
+<pre class="plain">flowchart LR
+  O[Orchestrator LLM<br/>decomposes at runtime] --> W1[Worker: subtask 1]
+  O --> W2[Worker: subtask 2]
+  W1 --> S[Synthesize]
+  W2 --> S</pre>
+</details>
+</figure>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Pattern</th><th>Path decided by</th><th>Use when</th><th>Canonical failure</th></tr></thead>
+  <tbody>
+    <tr><td>Prompt chaining</td><td>Code (fixed sequence)</td><td>Task decomposes cleanly into ordered steps; add gate checks between them</td><td>Error propagation — a bad step 1 poisons steps 2–N; latency stacks linearly</td></tr>
+    <tr><td>Routing</td><td>Code (after a classify step)</td><td>Distinct input categories that deserve specialized handling</td><td>Ambiguous inputs bounce between routes; categories drift over time — always keep a fallback route to a human or general handler</td></tr>
+    <tr><td>Parallelization</td><td>Code (fan-out / fan-in)</td><td>Independent subtasks, or when N diverse opinions beat one (voting)</td><td>Aggregation is the hard part everyone underestimates; N× cost for marginal gain if lenses aren't genuinely diverse</td></tr>
+    <tr><td>Orchestrator-workers</td><td>Model decides the subtasks, code runs the delegation</td><td>Subtask structure is unknowable upfront (research, multi-file changes)</td><td>Orchestrator context bloat; workers duplicate effort or lack context — handoff design is the whole game (Module 3)</td></tr>
+    <tr><td>Evaluator-optimizer</td><td>Code (generate → critique loop)</td><td>Quality is verifiable against a rubric and iteration measurably improves it</td><td>Sycophantic convergence — the evaluator starts approving everything; give it teeth (deterministic checks) and cap iterations</td></tr>
+    <tr><td>Agent</td><td><strong>Model, at runtime</strong></td><td>The path genuinely can't be enumerated — open-ended debugging, exploration, multi-step tasks over unknown terrain</td><td>All of §0.1's failure modes, times autonomy</td></tr>
+  </tbody>
+</table>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — default to workflows</div>
+<p>The engineering instinct that "more general = better architecture" is inverted here. A workflow is testable, traceable, and boring in exactly the ways production systems should be boring. An agent buys you runtime flexibility and charges you determinism.</p>
+<p>My default: start with the simplest pattern that could clear the quality bar, and only escalate on <em>eval evidence</em> — "the workflow version scores 71%, the agent version scores 89% on the same golden set" is an argument; "agents are the future" is not. In review, when someone proposes an agent, ask them to sketch the workflow version first. If they can enumerate the paths on a whiteboard, it's a workflow. The corollary also holds: if you find yourself adding the ninth conditional branch to a workflow, the paths have stopped being enumerable — let the model drive.</p>
+</aside>
+
+<h2><span class="sec">§ 0.3</span> The autonomy spectrum: matching trust to evidence</h2>
+<p>"Should we build an agent?" is the wrong question. The right one: <strong>how much of the control loop are we ready to hand over, given the blast radius when it's wrong?</strong> Autonomy is a dial, not a switch, and the spectrum has four useful stops.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 250" role="img" aria-label="Autonomy spectrum from copilot to autonomous agent, with a rising risk curve.">
+  <defs>
+    <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--ink)"/>
+    </marker>
+  </defs>
+  <line x1="40" y1="190" x2="850" y2="190" stroke="var(--ink)" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <text x="855" y="212" text-anchor="end" class="svg-label" font-size="10" fill="var(--muted)">autonomy →</text>
+  <!-- risk curve -->
+  <path d="M60 168 C 300 160, 560 120, 830 40" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-dasharray="6 4"/>
+  <text x="700" y="52" class="svg-label" font-size="10" font-weight="700" fill="var(--warn)">risk = irreversibility × access × autonomy</text>
+  <!-- stops -->
+  <g>
+    <circle cx="120" cy="190" r="5" fill="var(--accent)"/>
+    <text x="120" y="130" text-anchor="middle" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">COPILOT</text>
+    <text x="120" y="146" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">human reviews</text>
+    <text x="120" y="159" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">every output</text>
+  </g>
+  <g>
+    <circle cx="340" cy="190" r="5" fill="var(--accent)"/>
+    <text x="340" y="130" text-anchor="middle" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">WORKFLOW</text>
+    <text x="340" y="146" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">code owns the path,</text>
+    <text x="340" y="159" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">runs unattended, narrow</text>
+  </g>
+  <g>
+    <circle cx="580" cy="190" r="5" fill="var(--accent)"/>
+    <text x="580" y="118" text-anchor="middle" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">SEMI-AUTONOMOUS</text>
+    <text x="580" y="134" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">model owns the path inside</text>
+    <text x="580" y="147" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">a sandbox; human approves</text>
+    <text x="580" y="160" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">irreversible actions</text>
+  </g>
+  <g>
+    <circle cx="800" cy="190" r="5" fill="var(--accent)"/>
+    <text x="800" y="130" text-anchor="middle" class="svg-label" font-size="11" font-weight="700" fill="var(--ink)">AUTONOMOUS</text>
+    <text x="800" y="146" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">goal in, outcome out,</text>
+    <text x="800" y="159" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">audited after the fact</text>
+  </g>
+</svg>
+<figcaption><b>FIG 0.3</b> — The autonomy spectrum. Each step right removes a human checkpoint, so required evidence (evals, monitoring, reversibility) climbs the dashed curve. Position is a per-capability decision, not a product-level one.</figcaption>
+</figure>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Stop</th><th>Human's role</th><th>Blast radius of one bad action</th><th>What must be true first</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Copilot</td><td>Initiates and reviews everything</td><td>≈ zero — nothing ships unreviewed</td><td>Output quality clears "useful more often than annoying"</td><td>Code completion; draft-an-email</td></tr>
+    <tr><td>Workflow</td><td>Designs the path; monitors aggregates</td><td>One step's error, bounded by gates between steps</td><td>Golden-set evals per step; error handling at every gate</td><td>Ticket triage; document extraction pipeline</td></tr>
+    <tr><td>Semi-autonomous</td><td>Sets the task; approves irreversible actions</td><td>Bounded by sandbox + approval gates</td><td>Sandboxing, permission model, action allowlists, trajectory logging</td><td>Coding agent in a repo (Claude Code's default posture)</td></tr>
+    <tr><td>Autonomous</td><td>Sets goals; audits outcomes</td><td>Whatever its credentials can reach — design assuming a bad day</td><td>Eval maturity + reversibility + monitoring + incident playbooks. Earned, not declared</td><td>Scheduled research/maintenance agents with scoped credentials</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Two principles fall out of the table. First, <strong>autonomy is earned by evidence, not enabled by a flag</strong> — each step right should be justified by eval scores and operational history at the previous step, the way you'd earn the right to deploy on Fridays. Second, <strong>reversibility is the cheapest safety property you can buy</strong>: an agent that operates on branches, drafts, staging environments, and soft-deletes can be trusted with far more autonomy than one that touches production state, at the same model quality. Architect the substrate to be reversible and the autonomy debate gets dramatically easier (Module 12 formalizes this).</p>
+
+<h2><span class="sec">§ 0.4</span> The bitter lesson, applied to agents</h2>
+<p>Rich Sutton's "bitter lesson" from seventy years of AI research: general methods that leverage more compute eventually beat systems built on hand-encoded human knowledge — and the hand-encoded knowledge, which felt so clever when added, becomes the ceiling. The agentic translation: <strong>every piece of scaffolding you write is a bet against the next model release.</strong></p>
+<p>Concretely, scaffolding means: hard-coded task decompositions, rigid state machines wrapping the model, elaborate prompt contortions to force behavior, regex post-processors that "fix" model output, and multi-agent topologies invented to work around one model's weakness. Teams built all of these in 2023–2024 to make weak models usable, and much of it turned to dead weight — or an active handicap — as models improved. The 2026 version of the mistake is the same, just fancier.</p>
+<p>But "no scaffolding" is cargo-cult in the other direction. The resolution is to sort every piece of structure into one of two buckets:</p>
+<ul>
+  <li><strong>Risk controls</strong> — typed output boundaries, schema validation, permission gates, sandboxes, evals, audit logs. These manage the <em>consequences</em> of a probabilistic component in a deterministic system. They do not depreciate when models improve; a smarter model still shouldn't be able to drop your production tables.</li>
+  <li><strong>Capability workarounds</strong> — manual decomposition because the model can't plan; forced re-prompting loops because it misses instructions; output post-processing because it can't format. These encode <em>today's model weaknesses</em> and depreciate with every release. They're sometimes necessary — but they're technical debt with a known creditor.</li>
+</ul>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — design for deletion</div>
+<p>I ask teams to tag every scaffold in the architecture doc as <code>RISK-CONTROL</code> or <code>WORKAROUND</code>, with a one-line justification. Risk controls get maintained like any security infrastructure. Workarounds get an expiry review: on every major model release, re-run the eval suite with the workaround disabled. If the naked model now clears the bar, delete the scaffold — and treat the deletion as a win in the changelog, not a refactor to defer.</p>
+<p>The failure mode this prevents is real and expensive: a 2024-era pipeline of seven prompts, three regex fixers, and a voting layer that today underperforms a single well-contexted model call — but nobody dares touch it because it "works." Scaffolding you can't delete is architecture you don't understand.</p>
+</aside>
+
+<h2><span class="sec">§ 0.5</span> Lab — build <span class="mono">loopbot</span>, a no-framework agent</h2>
+<div class="block">
+<div class="hd">LAB 00 · Estimated 2–4 hours</div>
+<p><strong>Mission:</strong> build a file-question-answering agent over any real repository, using only a model provider's SDK — no agent framework. You will write the loop from FIG 0.1 and hit every guard and failure mode in §0.1 on purpose.</p>
+<p><strong>Spec:</strong></p>
+<ol>
+  <li>Two tools: <code>list_files(directory)</code> and <code>read_file(path)</code>, both returning errors as string observations (never exceptions), both truncating output to a byte budget you choose.</li>
+  <li>Guards: a max-turn cap, a running token/cost counter printed per turn, and a duplicate-call detector (same tool + same args twice in a row → inject a "you already tried this" observation).</li>
+  <li>Transcript: log every message — including tool results — to a JSONL file. This is your primitive trace (Module 11 upgrades it).</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+  <li>✅ Answers "which file defines <em>&lt;some function&gt;</em> and what does it do?" correctly on a repo of ≥ 50 files, citing the actual path.</li>
+  <li>✅ Given a question about a nonexistent file, recovers gracefully (lists the directory, adapts) instead of crashing or spiraling — show the transcript that proves it.</li>
+  <li>✅ Never exceeds the turn cap; prints total cost at exit.</li>
+  <li>✅ Run the same task with a frontier model and a small/cheap model; write five sentences on the behavioral difference you observed (this intuition is Module 13's cost-routing groundwork).</li>
+</ul>
+<p><strong>Stretch:</strong> add an evaluator-optimizer pass — a second model call that grades the answer against the cited file's actual content and triggers one retry on failure. Notice how quickly "just add a critic" doubles your cost. That tension is Module 11.</p>
+</div>
+
+<h2><span class="sec">§ 0.6</span> Consultant's checklist</h2>
+<div class="block">
+<div class="hd">Questions to ask any team claiming they "have agents"</div>
+<ul>
+  <li>For each capability: where does control flow live — code or model? Can they answer per-feature, or only with a marketing diagram?</li>
+  <li>What's the simplest taxonomy pattern that would clear the quality bar, and was it tried and measured before escalating to an agent?</li>
+  <li>What are the stop conditions on every loop? Who enforces turn caps and budgets — the model (bad) or the harness (good)?</li>
+  <li>What is the blast radius of the worst single tool call the system can make today? Is that action reversible, gated, or merely "unlikely"?</li>
+  <li>Which scaffolds are risk controls and which are model workarounds? When were the workarounds last re-validated against a current model?</li>
+  <li>What eval evidence would justify moving one step right on the autonomy spectrum — and does that evidence exist, or just enthusiasm?</li>
+  <li>What does one completed task cost (p50 and p99), and does anyone look at that number weekly?</li>
+</ul>
+</div>
+
+<h2><span class="sec">§ 0.7</span> Design-review questions (staff+)</h2>
+<div class="block">
+<div class="hd">Interview / design-review bank</div>
+<ol>
+  <li><strong>You're asked to build an AI code-review assistant.</strong> Which taxonomy pattern do you reach for first, and what evidence would push you toward a full agent? <em>Strong answers start at workflow (chaining or parallel lenses with an aggregator), name the gate checks, and demand eval deltas before granting the model control flow.</em></li>
+  <li><strong>Your agent's task success rate dropped after upgrading to a newer, stronger model.</strong> Diagnose. <em>Strong answers suspect capability workarounds tuned to the old model's behavior (prompt contortions, decomposition, post-processors), reach for trajectory diffs on the golden set, and A/B the scaffolds off.</em></li>
+  <li><strong>When is a 200-line while-loop the right architecture versus a graph framework?</strong> <em>Strong answers frame it as who-owns-the-harness (§0.1 sidebar) plus control-flow complexity, team skill distribution, human-in-the-loop needs, and observability requirements — not tribal framework preference.</em></li>
+  <li><strong>Argue both sides:</strong> "multi-agent systems are premature for most organizations." <em>Strong answers cite coordination tax and error compounding (Module 3 preview) against context-isolation wins, and land on a conditional position tied to eval maturity.</em></li>
+  <li><strong>An agent needs write access to a production database.</strong> Where do you place the human approval gate, and why there? <em>Strong answers put a typed proposal boundary in front of execution (agent proposes structured operations; a deterministic engine validates against an allowlist; irreversible categories require approval) rather than "review the SQL string."</em></li>
+</ol>
+</div>
+
+<h2><span class="sec">§ 0.8</span> Go deeper</h2>
+<ul>
+  <li><a href="https://www.anthropic.com/engineering/building-effective-agents">Anthropic — Building Effective Agents</a> (the workflow/agent taxonomy this module uses)</li>
+  <li><a href="http://www.incompleteideas.net/IncIdeas/BitterLesson.html">Rich Sutton — The Bitter Lesson</a></li>
+  <li><a href="https://arxiv.org/abs/2210.03629">Yao et al. — ReAct: Synergizing Reasoning and Acting in Language Models</a> (the paper behind the reason→act→observe loop)</li>
+  <li><a href="https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview">Claude docs — Tool use</a> (the raw API surface the Python track is built on)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-10 · Volatile surfaces: SDK names/APIs and framework versions move fast — verify against current docs. The four mental models themselves are stable.</p>
+
+<nav class="pager">
+  <a href="index.html">← FIELD MANUAL HOME</a>
+  <span class="disabled">NEXT: MODULE 01 — REASONING &amp; THOUGHT PROCESSES (QUEUED)</span>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
