@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 03 — Multi-Agent Architectures · Agentic Systems Field Manual</title>
+<!--
+  FRONT MATTER (for the ledger — see SCHEDULED_TASK_PROMPT.md / daily-run spec)
+  title: Multi-Agent Architectures
+  slug: module-03-multi-agent-architectures
+  pillar: ARCHITECTURE ("Architectures: topologies, coordination tax, context isolation, handoff semantics")
+  difficulty: Practitioner
+  series: The Agentic Systems Field Manual (module 4 of 16 + 3 capstones)
+  tags: orchestrator-workers, coordination-tax, context-isolation, handoff-semantics, blackboard-pattern, subagent-topologies
+  meta description: When context isolation is worth its coordination tax — orchestrator-workers, hierarchical, peer-swarm, blackboard, pipeline, and debate topologies compared on real axes, typed handoff semantics (briefs down, artifacts up), a full-stack orchestrator-workers build, and the steelmanned case for one well-tooled agent instead.
+  read time: ~24 min (~5,500 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  /* Top bar */
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  /* Figures */
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  /* Code tabs */
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  /* Judgment call sidebar */
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  /* Failure modes */
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  /* Tables */
+  .tbl-wrap { overflow-x: auto; margin: 1.4rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; background: var(--panel); }
+  th {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    text-align: left; color: var(--muted);
+    border-bottom: 2px solid var(--ink);
+    padding: .55rem .7rem;
+  }
+  td { border-bottom: 1px solid var(--border); padding: .6rem .7rem; vertical-align: top; }
+  td:first-child { font-weight: 700; white-space: nowrap; }
+
+  /* Lab / checklist blocks */
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← Field Manual</a>
+  <span>AGENTIC SYSTEMS FIELD MANUAL · MODULE 03 / 15</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">FM-03 · Architecture</div>
+  <h1>Multi-Agent Architectures</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Six topologies compared on the one axis that matters — the coordination tax versus what context isolation actually buys you — typed handoff semantics, a full-stack orchestrator-workers build, and the steelmanned case for staying single-agent.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-11</b></span>
+    <span>DEPTH <b>~5,500 words</b></span>
+    <span>PREREQS <b>Module 02</b></span>
+    <span>LAB <b>orchestrator-workers researcher vs. one well-tooled agent, evals decide</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§ 3.0</span> Orientation</h2>
+<p>The trace for one "evaluate this vendor" request shows a coordinator spawning six subagents. Four of them independently open the same 38,000-token compliance PDF — none knew a sibling had already fetched it, because none of them can see each other's tool calls. Two return summaries that disagree on the contract's renewal date, because one read a cached copy from an earlier turn and the prompt cache had gone stale. Total cost for the request: just under 320,000 tokens and 94 seconds. A single agent with the same three tools and a bigger context window answered the identical question, correctly, in 11,000 tokens and 7 seconds. The team had built a multi-agent system because the tutorial said parallel subagents are faster — nobody had priced what six agents cost to coordinate versus what isolating each one's context was supposed to buy back.</p>
+<p>Before frameworks made "spin up a crew of agents" one line of code, teams facing a task too big for one context window had exactly two options: chain fixed-shape calls together (Module 00 §0.2's prompt-chaining and routing patterns, still one control loop, one context) or write a monolithic agent with a bigger tool belt (Module 02) and hope the window held. Multi-agent architectures are the third option — genuinely separate agents, each with its own multi-turn loop and its own context window, coordinating to solve one task. Module 00 §0.2 already introduced <em>orchestrator-workers</em> as a workflow pattern, but there the "workers" were single LLM calls directed by one coordinating call — still one process, one control loop, context shared by construction. This module is about what changes once workers become full agents: independent context windows, independent tool loops, and a coordination problem that has to be engineered, not assumed away.</p>
+<p>The throughline: multi-agent systems have exactly one honest justification — <strong>context isolation</strong> — and exactly one honest cost — the <strong>coordination tax</strong> spent buying that isolation. Every topology in this module is a different way of trading one against the other. Get that trade wrong, as in the cold open above, and you've paid the tax without collecting the isolation's benefit.</p>
+
+<h2><span class="sec">§ 3.1</span> The coordination tax: context isolation is the point, not a side effect</h2>
+<p>Here is the only reason to reach for separate agents instead of one bigger agent: each subagent gets a context window free of every other subagent's tool noise, free of subtasks it doesn't need, and — critically — free of the context poisoning and attention dilution that Module 04 covers in depth (a long, noisy transcript degrades a model's ability to use the parts of it that still matter). If a task's subtasks are large enough or independent enough that combining them in one context would blow the window or bury the signal, isolation earns its keep. If they aren't, you're paying for isolation you didn't need.</p>
+<p>What you pay for that isolation is the coordination tax: every token and turn spent packaging context for a handoff, deduplicating work two agents both decided to do, and reconciling outputs that disagree because they never saw each other's reasoning. A rough accounting, useful in any design review:</p>
+<pre class="plain">total_cost ≈ Σ(per_worker_cost) + dispatch_overhead + synthesis_overhead + coordination_tax
+
+where coordination_tax ≈ redundant_fetches + conflict_resolution + reconciliation_of_disagreement</pre>
+<p>Multi-agent wins only when the reduction in <code>per_worker_cost</code> from a smaller, focused context — fewer tokens per call, fewer distractor tools, less attention dilution — outweighs everything on the right of that first plus sign. Nobody measures the right-hand side before shipping; that is the single most common root cause behind a multi-agent system that costs more and performs the same as the single agent it replaced.</p>
+
+<h2><span class="sec">§ 3.2</span> Six topologies, priced on the tax</h2>
+<p>Every multi-agent system is one of a small number of coordination shapes. Two earn a diagram here because their mechanics differ most from the workflow-level patterns Module 00 already covered; the rest are priced in the table that follows.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 900 250" role="img" aria-label="Three topology sketches: orchestrator-workers with a coordinator dispatching briefs down and collecting typed findings back up; blackboard with four agents reading and writing a shared workspace opportunistically; pipeline with four stages in strict one-directional sequence.">
+  <defs>
+    <marker id="m3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="m3b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+    </marker>
+  </defs>
+
+  <rect x="10" y="10" width="270" height="210" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="110" y="35" width="80" height="34" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="150" y="56" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Coordinator</text>
+  <rect x="40" y="140" width="58" height="32" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="69" y="160" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">W1</text>
+  <rect x="121" y="140" width="58" height="32" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="150" y="160" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">W2</text>
+  <rect x="202" y="140" width="58" height="32" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="231" y="160" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">W3</text>
+  <path d="M120 69 L69 140" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#m3a)"/>
+  <path d="M150 69 L150 140" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#m3a)"/>
+  <path d="M180 69 L231 140" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#m3a)"/>
+  <path d="M80 140 L130 70" fill="none" stroke="var(--warn)" stroke-width="1.1" stroke-dasharray="4 3" marker-end="url(#m3b)"/>
+  <text x="150" y="200" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">brief down (solid) · typed Finding up (dashed)</text>
+  <text x="150" y="232" text-anchor="middle" class="svg-label" font-size="9.5" font-weight="700" fill="var(--ink)">ORCHESTRATOR-WORKERS</text>
+
+  <rect x="315" y="10" width="270" height="210" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="380" y="90" width="140" height="50" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="4 3"/><text x="450" y="119" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Blackboard</text>
+  <circle cx="355" cy="45" r="17" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="355" y="49" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">A1</text>
+  <circle cx="545" cy="45" r="17" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="545" y="49" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">A2</text>
+  <circle cx="355" cy="185" r="17" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="355" y="189" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">A3</text>
+  <circle cx="545" cy="185" r="17" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="545" y="189" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">A4</text>
+  <line x1="365" y1="58" x2="405" y2="92" stroke="var(--muted)" stroke-width="1.1"/>
+  <line x1="535" y1="58" x2="495" y2="92" stroke="var(--muted)" stroke-width="1.1"/>
+  <line x1="365" y1="172" x2="405" y2="138" stroke="var(--muted)" stroke-width="1.1"/>
+  <line x1="535" y1="172" x2="495" y2="138" stroke="var(--muted)" stroke-width="1.1"/>
+  <text x="450" y="232" text-anchor="middle" class="svg-label" font-size="9.5" font-weight="700" fill="var(--ink)">BLACKBOARD (SHARED READ/WRITE)</text>
+
+  <rect x="620" y="10" width="270" height="210" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="635" y="100" width="52" height="34" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="661" y="121" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">S1</text>
+  <rect x="702" y="100" width="52" height="34" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="728" y="121" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">S2</text>
+  <rect x="769" y="100" width="52" height="34" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="795" y="121" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">S3</text>
+  <rect x="836" y="100" width="44" height="34" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="858" y="121" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">S4</text>
+  <line x1="687" y1="117" x2="700" y2="117" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#m3a)"/>
+  <line x1="754" y1="117" x2="767" y2="117" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#m3a)"/>
+  <line x1="821" y1="117" x2="834" y2="117" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#m3a)"/>
+  <text x="755" y="232" text-anchor="middle" class="svg-label" font-size="9.5" font-weight="700" fill="var(--ink)">PIPELINE (STRICT SEQUENTIAL)</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — The two topologies with the least in common with a single-loop workflow (orchestrator-workers with real context isolation, and blackboard's opportunistic shared state), plus pipeline as the zero-negotiation baseline. Hierarchical, peer-swarm, and debate are priced in the table below.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  subgraph OW[orchestrator-workers]
+    C[Coordinator] -->|brief| W1 & W2 & W3
+    W1 & W2 & W3 -.->|Finding| C
+  end
+  subgraph BB[blackboard]
+    BOARD((Blackboard))
+    A1 <--> BOARD
+    A2 <--> BOARD
+    A3 <--> BOARD
+    A4 <--> BOARD
+  end
+  subgraph PL[pipeline]
+    S1 --> S2 --> S3 --> S4
+  end</pre>
+</details>
+</figure>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Topology</th><th>Coordination tax</th><th>Parallelism</th><th>Best fit</th></tr></thead>
+  <tbody>
+    <tr><td>Orchestrator-workers</td><td>Dispatch briefs + synthesize findings — moderate, paid once</td><td>Full, across independent workers</td><td>Task decomposes upfront into non-overlapping, independent subtasks</td></tr>
+    <tr><td>Hierarchical</td><td>Compounds — every extra level adds its own dispatch+synthesis tax</td><td>Full within each level</td><td>Subtasks are themselves decomposable (research → per-topic sub-research)</td></tr>
+    <tr><td>Peer-swarm</td><td>High — agents negotiate/claim from a shared queue with no fixed leader</td><td>Full, opportunistic</td><td>No natural coordinator; resilience to one agent's failure matters more than efficiency</td></tr>
+    <tr><td>Blackboard</td><td>High — read/write contention, staleness, an agent acting on state a sibling just changed</td><td>Opportunistic, not guaranteed</td><td>Decomposition is genuinely emergent — you don't know the plan until partial results reveal it (diagnosis-style problems)</td></tr>
+    <tr><td>Pipeline</td><td>Lowest — no negotiation, no fan-out, one handoff per stage</td><td>None — strictly sequential</td><td>Steps are known, ordered, and each stage's output is exactly the next stage's input</td></tr>
+    <tr><td>Debate/adversarial</td><td>N× the base cost — the same subtask run by N agents, plus a judge or vote</td><td>Full across debaters, then a synchronization point</td><td>A single call's error rate on the specific failure you're guarding against is high enough to justify N× cost — measure that rate first</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Pipeline deserves one clarifying note: it is the multi-agent-process version of the same idea Module 01 §1.2 built as a single agent's deterministic DAG scheduler. The difference is where the boundary sits — §1.2's nodes were function calls inside one process; a pipeline topology's stages are separate agents, possibly separate services, so the "typed proposal boundary" from Module 02 §2.2 has to actually cross a process or network boundary between S2 and S3, not just a Python function call.</p>
+
+<h2><span class="sec">§ 3.3</span> Handoff semantics: what actually crosses the isolation boundary</h2>
+<p>Isolation is only real if you resist the easiest way to break it: handing the next agent your entire transcript "to be safe." Three tiers exist, and most working systems use two of them deliberately rather than one of them by accident.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 900 230" role="img" aria-label="Three handoff tiers: full context transfer sends an entire transcript and defeats isolation; a brief sends only task, context references, and constraints downward to a fresh worker; an artifact sends only a typed result upward from worker to orchestrator.">
+  <defs>
+    <marker id="m3c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+    </marker>
+    <marker id="m3d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <rect x="30" y="25" width="200" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="130" y="50" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Orchestrator (full transcript)</text>
+  <path d="M235 45 L595 45" fill="none" stroke="var(--warn)" stroke-width="3" marker-end="url(#m3c)"/>
+  <text x="415" y="35" text-anchor="middle" class="svg-label" font-size="9" fill="var(--warn)">~38K tokens, incl. noise</text>
+  <rect x="600" y="25" width="220" height="40" rx="5" fill="var(--accent-soft)" stroke="var(--warn)" stroke-width="1.3"/><text x="710" y="50" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Worker inherits everything</text>
+
+  <rect x="30" y="95" width="200" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="130" y="120" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Orchestrator</text>
+  <path d="M235 115 L400 115" fill="none" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#m3d)"/>
+  <rect x="405" y="95" width="150" height="40" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="480" y="120" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">SubagentBrief</text>
+  <path d="M560 115 L595 115" fill="none" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#m3d)"/>
+  <rect x="600" y="95" width="220" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="710" y="113" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Worker starts clean</text><text x="710" y="127" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">task + refs + constraints only</text>
+
+  <rect x="600" y="165" width="220" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="710" y="190" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Worker (own loop, own context)</text>
+  <path d="M595 185 L400 185" fill="none" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#m3d)"/>
+  <rect x="245" y="165" width="150" height="40" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="320" y="190" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">Finding</text>
+  <path d="M240 185 L235 185" fill="none" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#m3d)"/>
+  <rect x="30" y="165" width="200" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="130" y="184" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Orchestrator</text><text x="130" y="197" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">sees the claim only</text>
+</svg>
+<figcaption><b>FIG 3.2</b> — Full transfer (top) is the tier to avoid. Working systems send briefs down and artifacts up (bottom two lanes) — the orchestrator never reads a worker's raw transcript, only its typed result.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  O1[Orchestrator] -->|full transcript, ~38K tok| W1[Worker inherits everything]
+  O2[Orchestrator] -->|SubagentBrief| W2[Worker: fresh context]
+  W3[Worker] -->|Finding| O3[Orchestrator: claim only]</pre>
+</details>
+</figure>
+
+<p>The brief and the artifact are both instances of Module 02 §2.2's typed proposal boundary, applied to inter-agent handoffs instead of tool calls: the orchestrator proposes work as a validated object, and a worker's result is accepted only as a validated object, never a trusted blob of prose.</p>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — Pydantic</button></div>
+  <div class="tab-panel">
+<pre><code>from pydantic import BaseModel, Field
+
+class SubagentBrief(BaseModel):
+    subagent_id: str
+    task: str
+    context_refs: list[str]              # pointers the worker fetches itself — never the inlined transcript
+    constraints: list[str] = Field(default_factory=list)
+
+class Finding(BaseModel):
+    subagent_id: str
+    claim: str
+    evidence_refs: list[str]
+    confidence: float = Field(ge=0, le=1)</code></pre>
+  </div>
+</div>
+<p><code>context_refs</code> is the detail that prevents the cold open's redundant-fetch problem: a brief carries pointers (file paths, document IDs, row keys), not inlined text, so the orchestrator can dedupe references <em>before</em> any worker runs — see §3.4's <code>dispatch()</code>.</p>
+
+<h2><span class="sec">§ 3.4</span> Full-stack build: an orchestrator-workers researcher</h2>
+<p>The topology from FIG 3.1's left panel, built end to end. Three layers: the agent runtime dispatches deduplicated briefs to isolated workers and synthesizes only their typed findings; the API streams per-worker progress over SSE; the frontend renders a live tree. A fourth layer — one Postgres table — is the difference between "restart from zero" and "resume" when the process crashes mid-run.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 400" role="img" aria-label="Full-stack orchestrator-workers pipeline: agent runtime dispatches deduplicated briefs to three isolated workers running concurrently, synthesizes their typed findings, while an SSE endpoint streams subagent-spawned and subagent-done events to a React subagent tree component in arrival order.">
+  <defs>
+    <marker id="m3e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="26" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="36" width="840" height="150" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="45" y="90" width="110" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="100" y="115" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">build_briefs</text>
+  <rect x="200" y="90" width="120" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="260" y="110" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">dispatch()</text><text x="260" y="123" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">dedupes context_refs</text>
+  <rect x="365" y="50" width="90" height="30" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="410" y="70" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">run_worker A</text>
+  <rect x="365" y="93" width="90" height="30" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="410" y="113" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">run_worker B</text>
+  <rect x="365" y="136" width="90" height="30" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="410" y="156" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">run_worker C</text>
+  <rect x="500" y="90" width="120" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="560" y="115" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">ThreadPool</text>
+  <rect x="670" y="90" width="150" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="745" y="110" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">synthesize()</text><text x="745" y="123" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">sees Findings only</text>
+  <line x1="155" y1="111" x2="195" y2="111" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#m3e)"/>
+  <line x1="320" y1="105" x2="360" y2="70" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#m3e)"/>
+  <line x1="320" y1="111" x2="360" y2="111" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#m3e)"/>
+  <line x1="320" y1="118" x2="360" y2="150" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#m3e)"/>
+  <line x1="455" y1="65" x2="495" y2="100" stroke="var(--muted)" stroke-width="1" marker-end="url(#m3e)"/>
+  <line x1="455" y1="108" x2="495" y2="111" stroke="var(--muted)" stroke-width="1" marker-end="url(#m3e)"/>
+  <line x1="455" y1="151" x2="495" y2="122" stroke="var(--muted)" stroke-width="1" marker-end="url(#m3e)"/>
+  <line x1="620" y1="111" x2="665" y2="111" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#m3e)"/>
+
+  <text x="20" y="218" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API + FRONTEND</text>
+  <rect x="20" y="228" width="840" height="150" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="60" y="280" width="280" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="200" y="300" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">GET /research/:id/events</text><text x="200" y="315" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">SSE — one event per worker completion, arrival order</text>
+  <rect x="460" y="280" width="260" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="590" y="300" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">&lt;SubagentTree/&gt;</text><text x="590" y="315" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">EventSource → live per-worker status</text>
+  <line x1="340" y1="303" x2="455" y2="303" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#m3e)"/>
+  <path d="M560 228 L560 200 L745 200 L745 132" fill="none" stroke="var(--accent)" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#m3e)"/>
+  <text x="450" y="358" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">the same Finding objects flow: runtime → SSE payload → tree row, no re-derivation</text>
+</svg>
+<figcaption><b>FIG 3.3</b> — The orchestrator-workers researcher across the full stack. <code>dispatch()</code> dedupes overlapping <code>context_refs</code> before any worker runs — the direct fix for the cold open's four-agents-open-the-same-PDF tax.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  B[build_briefs] --> D["dispatch(): dedupe context_refs"]
+  D --> W1[run_worker A] & W2[run_worker B] & W3[run_worker C]
+  W1 & W2 & W3 --> Y[synthesize: Findings only]
+  D -. subagent_done SSE .-> UI[SubagentTree]</pre>
+</details>
+</figure>
+
+<h3>Layer 1 — agent runtime: dispatch with pre-run dedupe, isolated workers (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — anthropic + pydantic + ThreadPoolExecutor</button></div>
+  <div class="tab-panel">
+<pre><code># pip install anthropic pydantic
+from pydantic import BaseModel, Field
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import anthropic, json
+
+class SubagentBrief(BaseModel):
+    subagent_id: str
+    task: str
+    context_refs: list[str]
+    constraints: list[str] = Field(default_factory=list)
+
+class Finding(BaseModel):
+    subagent_id: str
+    claim: str
+    evidence_refs: list[str]
+    confidence: float = Field(ge=0, le=1)
+
+client = anthropic.Anthropic()
+
+WORKER_SYSTEM = """You are a research worker. You receive ONE brief and nothing else —
+no sibling worker's output, no orchestrator reasoning. Fetch only the context_refs listed,
+respect every constraint, and respond with JSON matching:
+{"subagent_id": str, "claim": str, "evidence_refs": [str], "confidence": float}"""
+
+def fetch_ref(path: str) -> str:
+    with open(path, encoding="utf-8") as f:
+        return f.read()[:4000]
+
+def run_worker(brief: SubagentBrief) -> Finding:
+    context = "\n\n".join(fetch_ref(r) for r in brief.context_refs)
+    resp = client.messages.create(
+        model="claude-sonnet-5", max_tokens=1024, system=WORKER_SYSTEM,
+        messages=[{"role": "user", "content":
+            f"{brief.task}\n\nContext:\n{context}\n\nConstraints: {brief.constraints}"}],
+    )
+    return Finding.model_validate(json.loads(resp.content[-1].text))  # typed boundary — same rule as M01 §1.5 / M02 §2.2
+
+def dispatch(briefs: list[SubagentBrief]) -> list[Finding]:
+    claimed: set[str] = set()
+    for b in briefs:                                  # first brief wins each ref — this is the coordination-tax fix
+        b.context_refs = [r for r in b.context_refs if r not in claimed]
+        claimed.update(b.context_refs)
+    with ThreadPoolExecutor(max_workers=len(briefs)) as pool:
+        futures = [pool.submit(run_worker, b) for b in briefs]
+        return [f.result() for f in as_completed(futures)]
+
+def synthesize(findings: list[Finding]) -> str:
+    bullets = "\n".join(f"- {f.claim} (confidence {f.confidence})" for f in findings)
+    resp = client.messages.create(model="claude-sonnet-5", max_tokens=1024,
+        messages=[{"role": "user", "content": f"Synthesize one answer from these findings:\n{bullets}"}])
+    return resp.content[-1].text                       # orchestrator never sees a worker's raw transcript</code></pre>
+  </div>
+</div>
+
+<h3>Layer 2 — API/transport: streaming worker completions over SSE (Python, FastAPI)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — FastAPI + sse-starlette</button></div>
+  <div class="tab-panel">
+<pre><code># pip install fastapi uvicorn sse-starlette
+from fastapi import FastAPI
+from sse_starlette.sse import EventSourceResponse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio, json, queue
+
+app = FastAPI()
+JOBS = {
+    "vendor-abc": [
+        SubagentBrief(subagent_id="w1", task="Summarize security posture",
+                      context_refs=["docs/vendor-abc/security.md"]),
+        SubagentBrief(subagent_id="w2", task="Summarize pricing terms",
+                      context_refs=["docs/vendor-abc/pricing.md"]),
+        SubagentBrief(subagent_id="w3", task="Summarize SLA terms",
+                      context_refs=["docs/vendor-abc/sla.md"]),
+    ]
+}
+
+def run_all(briefs: list[SubagentBrief], q: "queue.Queue"):
+    with ThreadPoolExecutor(max_workers=len(briefs)) as pool:
+        futures = {pool.submit(run_worker, b): b for b in briefs}
+        for f in as_completed(futures):
+            q.put(f.result())
+    q.put(None)                                         # sentinel: every worker finished
+
+@app.get("/research/{job_id}/events")
+async def research_events(job_id: str):
+    async def stream():
+        briefs = JOBS[job_id]
+        yield {"event": "dispatch", "data": json.dumps([b.model_dump() for b in briefs])}
+        q: queue.Queue = queue.Queue()
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, run_all, briefs, q)   # workers run concurrently in the background
+        findings = []
+        while True:
+            finding = await asyncio.to_thread(q.get)      # drains in arrival order, not dispatch order
+            if finding is None:
+                break
+            findings.append(finding)
+            yield {"event": "subagent_done", "data": json.dumps(finding.model_dump())}
+        yield {"event": "complete", "data": json.dumps({"answer": synthesize(findings)})}
+    return EventSourceResponse(stream())</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — frontend/UX: a live subagent tree over EventSource (TypeScript, React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React</button></div>
+  <div class="tab-panel">
+<pre><code>// npm install react
+import { useEffect, useState } from "react";
+
+type WorkerStatus = "pending" | "done";
+interface Finding { subagent_id: string; claim: string; confidence: number; }
+
+export function SubagentTree({ jobId }: { jobId: string }) {
+  const [workers, setWorkers] = useState<Record<string, WorkerStatus>>({});
+  const [findings, setFindings] = useState<Finding[]>([]);
+
+  useEffect(() => {
+    const source = new EventSource(`/research/${jobId}/events`);
+    source.addEventListener("dispatch", (e) => {
+      const briefs = JSON.parse((e as MessageEvent).data);
+      setWorkers(Object.fromEntries(briefs.map((b: any) => [b.subagent_id, "pending"])));
+    });
+    source.addEventListener("subagent_done", (e) => {
+      const finding: Finding = JSON.parse((e as MessageEvent).data);
+      setWorkers((prev) => ({ ...prev, [finding.subagent_id]: "done" }));
+      setFindings((prev) => [...prev, finding]);          // arrival order — the fastest worker renders first
+    });
+    source.addEventListener("complete", () => source.close());
+    source.onerror = () => source.close();                // reconnect/backoff policy is Pillar-9 territory; out of scope here
+    return () => source.close();
+  }, [jobId]);
+
+  return (
+    <ul>
+      {Object.entries(workers).map(([id, status]) => (
+        <li key={id}>{status === "done" ? "✅" : "⏳"} {id}</li>
+      ))}
+    </ul>
+  );
+}</code></pre>
+  </div>
+</div>
+
+<p>The fourth layer — data/infra — is one table: <code>create table findings (job_id uuid, subagent_id text, claim text, evidence_refs jsonb, confidence real, created_at timestamptz default now(), primary key (job_id, subagent_id))</code>. A crashed orchestrator resumes by re-dispatching only the briefs whose <code>subagent_id</code> isn't already a row — not every worker from scratch. Module 09 builds the full checkpoint/resume harness on top of exactly this shape; here it's enough that the SSE stream and the scheduler's writes go through the same table, so a client that reconnects mid-run sees consistent state instead of racing the workers.</p>
+
+<h2><span class="sec">§ 3.5</span> The steelmanned case against multi-agent</h2>
+<p>Cognition's widely-read "Don't Build Multi-Agents" argues the failure mode plainly: context degrades at every handoff, a distributed trace across N agents is dramatically harder to debug than one agent's linear transcript, and most demos showing multi-agent "wins" are actually workflows — fixed decomposition, no real coordination problem — wearing a multi-agent label. All three points are correct as stated, and all three are exactly the coordination tax from §3.1, named from the debugging side instead of the cost side.</p>
+<p>Anthropic's own account of building a production multi-agent research system is the honest counterweight: for genuinely open-ended, breadth-first research tasks, a lead agent coordinating parallel subagents beat single-agent Claude by 90.2% on their internal eval, largely because the task was naturally decomposable into independent, context-heavy searches that would have blown one context window trying to hold all the raw search results at once. The same post is candid about the tax: early versions spawned 50 subagents for simple queries that needed three, agents scoured the web for sources that didn't exist, and subagents distracted each other with excessive status updates before the team fixed it with tighter prompts and explicit fan-out limits.</p>
+<p>Both are true at once. The variable that decides which side you land on is whether your subtasks are <em>read-heavy and independent</em> — little cross-talk needed, each subtask's context doesn't fit comfortably alongside the others — or whether they <em>share most of their context</em>, in which case one agent with better tools and a bigger window is strictly cheaper and strictly easier to debug.</p>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Signal</th><th>Favors multi-agent</th><th>Favors one well-tooled agent</th></tr></thead>
+  <tbody>
+    <tr><td>Subtask context overlap</td><td>Low — each subtask needs different, large source material</td><td>High — subtasks reference the same few documents</td></tr>
+    <tr><td>Debuggability requirement</td><td>Secondary to latency/throughput</td><td>Primary — one linear trace is non-negotiable</td></tr>
+    <tr><td>Task shape</td><td>Genuinely open-ended, breadth matters more than a fixed plan</td><td>Fixed, known steps — that's Module 00's workflow taxonomy, not this module</td></tr>
+    <tr><td>Cost tolerance</td><td>Latency/throughput gain is worth N× the token spend</td><td>Cost-per-task is the constraint</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2><span class="sec">§ 3.6</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">Failure modes — multi-agent architectures</div>
+<ol>
+  <li><strong>Redundant context fetches (the cold open).</strong> Symptom: two or more subagent traces within the same request show identical tool calls against the same file or record. Mitigation: dedupe <code>context_refs</code> across all briefs before dispatch, as in §3.4's <code>dispatch()</code> — not after the fact.</li>
+  <li><strong>Lost-in-the-brief.</strong> The orchestrator's brief omits a constraint the worker needed, so the worker's output is internally consistent and looks correct in its own trace, but violates a rule visible only in context the orchestrator never passed down. Symptom: an escalation or incident where the worker "did exactly what it was told" and the told was incomplete. Mitigation: treat brief-writing as its own reviewed artifact (the same discipline Module 02 §2.2 applies to tool schemas), not a string an orchestrator improvises per call.</li>
+  <li><strong>Coordination deadlock/livelock in blackboard or peer-swarm topologies.</strong> Two agents each wait for the other's write, or repeatedly overwrite each other's contribution to the shared state. Symptom: the blackboard's value for a given key oscillates between two states across turns, or a key's write-count climbs with the task's overall completion signal flat. Mitigation: version the blackboard (optimistic concurrency, not last-write-wins) and cap the number of opportunistic write attempts per agent per task.</li>
+  <li><strong>Runaway subagent spawning.</strong> A coordinator (or worse, a hierarchical coordinator's sub-coordinator) recursively decomposes without a fan-out cap. Anthropic's own account of this: early versions of their research system spawned 50 subagents for queries that needed three. Symptom: active-subagent count climbs faster than task complexity justifies, visible as a step-function jump in the cost-per-task dashboard. Mitigation: a hard fan-out limit enforced in the deterministic dispatcher, never left to the planner's discretion.</li>
+  <li><strong>Debate false consensus.</strong> N debating agents converge on unanimous agreement not because the answer is right but because they share the same training-induced blind spot, or because a majority vote overrides the one dissenting agent that happened to be correct. Symptom: the debate "passes" (unanimous or majority) with no dissent logged, yet golden-set accuracy on that task class doesn't improve — or gets worse — compared to a single well-prompted agent.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — multi-agent or one well-tooled agent?</div>
+<p>Reach for multi-agent when subtasks are genuinely independent, each needs context large or specialized enough that combining them would blow one window or dilute attention, and you're willing to pay dispatch, synthesis, and reconciliation overhead for the isolation. Stay with one agent, better tooled, when subtasks overlap in what they need to know, when a single linear trace matters more than throughput, or — the tell that actually settles most reviews — when you can't name what a worker's isolated context buys you beyond "it felt like the modern way to build it."</p>
+<p>Measure before committing either way: run the task both as an orchestrator-workers system and as one agent with the union of the workers' tools, on the same golden set, and compare accuracy, cost, and latency. §3.8's lab is that comparison. Teams that skip it are the ones who end up in this module's cold open.</p>
+</aside>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — which topology, once you've committed to multi-agent</div>
+<p>Reach for orchestrator-workers or hierarchical when the decomposition is knowable before dispatch — you can sketch which subtasks exist and that they don't depend on each other's output. Reach for pipeline when the steps are strictly ordered and each stage's input is exactly the prior stage's output — it's the lowest-tax topology precisely because it negotiates nothing. Reach for blackboard only when the decomposition is genuinely emergent — you don't know the shape of the problem until partial results reveal it — and accept that its tax (contention, staleness) is the price of not having to plan upfront. Reach for debate only after you've measured a single agent's error rate on the specific failure mode in question; if you haven't measured it, you're guessing at whether N× the cost is worth it.</p>
+</aside>
+
+<h2><span class="sec">§ 3.7</span> Lab — orchestrator-workers researcher vs. one well-tooled agent</h2>
+<div class="block">
+<div class="hd">LAB 03 · Estimated 4–6 hours</div>
+<p><strong>Mission:</strong> build §3.4's orchestrator-workers researcher for real, then build a single agent with the union of all three workers' tools and a bigger context window, and let evals — not intuition — decide which one you'd ship.</p>
+<p><strong>Spec:</strong></p>
+<ol>
+  <li>Pick a research task family with 3–5 genuinely independent sub-questions over real source documents (a vendor evaluation, a multi-file codebase audit, a compliance review — anything where the sub-questions don't need each other's answers to be answered).</li>
+  <li>Implement §3.4's orchestrator-workers version exactly, including the pre-dispatch dedupe. Wire it to the SSE endpoint and either the React component or a minimal HTML page so a run is observable live.</li>
+  <li>Implement a single-agent version: one context window, one tool loop, access to every source document the three workers had.</li>
+  <li>Run both against 5 real task instances. Record total tokens, wall-clock latency, and an accuracy score against a golden answer you write by hand for each instance.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+  <li>✅ <code>curl -N http://localhost:8000/research/vendor-abc/events</code> streams <code>subagent_done</code> events in arrival order — confirm at least one run where the events arrive out of dispatch order (worker 3 finishes before worker 1).</li>
+  <li>✅ A table: architecture × (accuracy, total tokens, p50 latency) across the 5 task instances, for both versions.</li>
+  <li>✅ A written verdict, 5–8 sentences, naming which architecture you'd ship and citing the specific numbers — not "the multi-agent one felt more thorough."</li>
+  <li>✅ One induced failure captured in a transcript: force two briefs to claim an overlapping <code>context_ref</code> before the dedupe fix, show the redundant fetch, then show the fix removing it.</li>
+</ul>
+<p><strong>Stretch:</strong> add a fan-out cap to the dispatcher and a test that proves a pathological brief-generator (one that tries to spawn 20 workers for a 3-subtask job) gets capped, not honored.</p>
+</div>
+
+<h2><span class="sec">§ 3.8</span> Consultant's checklist</h2>
+<div class="block">
+<div class="hd">Questions to ask any team running a multi-agent system</div>
+<ul>
+  <li>What does context isolation buy this specific task — named concretely, not "it's more scalable"?</li>
+  <li>Has anyone measured the coordination tax (redundant fetches, reconciliation, dispatch/synthesis overhead) against a single-agent baseline on the same task?</li>
+  <li>What crosses a handoff boundary — a full transcript, a typed brief, or a typed artifact? If it's a full transcript, why is this multi-agent at all?</li>
+  <li>Is there a hard fan-out cap enforced in deterministic code, or is subagent count left to a planner's discretion?</li>
+  <li>For any blackboard or peer-swarm system: what happens when two agents write the same key in the same round — last-write-wins, or versioned/optimistic concurrency?</li>
+  <li>For any debate topology: what's the measured error rate of a single agent on the failure mode being guarded against, and does N× the cost actually buy a proportional accuracy gain?</li>
+</ul>
+</div>
+
+<h2><span class="sec">§ 3.9</span> Design-review questions (staff+)</h2>
+<div class="block">
+<div class="hd">Interview / design-review bank</div>
+<ol>
+  <li><strong>A team proposes five agents for a task you suspect one agent could do. What's your first question?</strong> <em>Strong answers ask what each proposed agent's isolated context contains that the others' don't — if the answer is "they all need most of the same source material," that's the tell for one agent with better tools, not five agents negotiating.</em></li>
+  <li><strong>Your orchestrator-workers system's cost tripled after adding a fourth worker type, with no accuracy change. Diagnose.</strong> <em>Strong answers check for overlapping <code>context_refs</code> across the new worker type and the existing three first (the cold-open failure), then check whether the new worker type introduced a blackboard-style shared resource that the others now contend over.</em></li>
+  <li><strong>Design the handoff for an orchestrator that dispatches work to workers built on a different framework than the orchestrator itself.</strong> <em>Strong answers reach for an artifact-mediated handoff — a typed brief/finding schema serialized as JSON crossing a process or network boundary, framework-agnostic by construction — and explicitly flag that once the workers are a different team's or a different org's agents, this becomes Module 10's A2A territory, not this module's.</em></li>
+  <li><strong>Steelman both sides: "multi-agent systems are strictly harder to debug than single agents."</strong> <em>Strong answers concede the trace is genuinely harder to read linearly and that Cognition's critique is correct as far as it goes, then counter that a well-typed Finding/Brief boundary makes each worker's contribution independently auditable in a way a single agent's 40-turn transcript often isn't — landing on "harder to read as one trace, easier to audit as discrete typed contributions," not a flat yes/no.</em></li>
+  <li><strong>A blackboard-based system intermittently produces different final answers for the identical input. Where do you look first?</strong> <em>Strong answers suspect write-order nondeterminism on the shared state before suspecting model nondeterminism — check whether two agents wrote conflicting keys in the same round and whether the resolution policy is deterministic (versioned) or accidental (whichever thread's write lands last).</em></li>
+</ol>
+</div>
+
+<h2><span class="sec">§ 3.10</span> Go deeper</h2>
+<ul>
+  <li><a href="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic engineering — How we built our multi-agent research system</a> (the 90.2% result and the 50-subagents-for-a-simple-query failure §3.5/§3.6 cite)</li>
+  <li><a href="https://cognition.com/blog/dont-build-multi-agents">Cognition — Don't Build Multi-Agents</a> (the steelmanned critique §3.5 works through)</li>
+  <li><a href="https://code.claude.com/docs/en/agent-sdk/subagents">Claude Agent SDK docs — Subagents</a> (a production implementation of the isolated-context-window mechanism this module is built around)</li>
+  <li><a href="https://i.stanford.edu/pub/cstr/reports/cs/tr/86/1123/CS-TR-86-1123.pdf">Nii — Blackboard Systems</a> (the original architecture behind §3.2's blackboard topology, predating LLMs by four decades)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-11 · Volatile surfaces: the specific eval numbers cited from Anthropic's multi-agent research post, and any framework-specific subagent APIs — verify against current docs before citing them in a proposal. The six topologies, the coordination-tax framing, and the handoff-tier taxonomy are stable architecture.</p>
+
+<nav class="pager">
+  <a href="module-02.html">← MODULE 02 — SINGLE-AGENT ARCHITECTURES</a>
+  <span class="disabled">NEXT: MODULE 04 — CONTEXT ENGINEERING (QUEUED)</span>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>

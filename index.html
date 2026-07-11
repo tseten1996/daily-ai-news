@@ -302,7 +302,7 @@
         <h2>The Agentic Systems Field Manual</h2>
         <p>A 16-module, principal-level path through agentic AI — build it, apply it, consult on it. Labs, failure modes, and three-track code in every module.</p>
       </span>
-      <span class="mb-status"><b>M00–M02 PUBLISHED</b><br>13 QUEUED · OPEN →</span>
+      <span class="mb-status"><b>M00–M03 PUBLISHED</b><br>12 QUEUED · OPEN →</span>
     </a>
   </div>
   <div class="toolbar">
@@ -353,6 +353,99 @@
      data-hue (0-360), data-blurb.
      ====================================================================== -->
 <main id="articles">
+
+<article class="topic" id="grok-45-spacexai-cursor"
+  data-title="Grok 4.5: SpaceXAI's First Model Since the $60B Cursor Deal"
+  data-date="2026-07-11" data-tag="Coding" data-emoji="🛰️" data-hue="18"
+  data-blurb="A 1.5T-param MoE trained on trillions of Cursor coding tokens, priced 60–76% below Opus 4.8. The coding-data flywheel thesis gets its first real product test.">
+<p class="stamp">date added: 2026-07-11</p>
+
+<h4>What it is</h4>
+<p>On July 8, SpaceXAI (the AI unit formed from xAI's consolidation under SpaceX) shipped <strong>Grok 4.5</strong> — its first release since disclosing a $60B acquisition of Cursor in June (the deal isn't closed yet; that's expected Q3 2026). The model runs on SpaceXAI's <strong>V9</strong> foundation architecture, a 1.5-trillion-parameter mixture-of-experts trained on tens of thousands of NVIDIA GB300 GPUs, with training data reportedly including trillions of tokens drawn from Cursor's own coding-session logs. Reported results: 83.3% on Terminal-Bench 2.1. Pricing is $2 per million input tokens / $6 per million output — about 60% cheaper on input and 76% cheaper on output than Anthropic's Opus 4.8. It's live today in Cursor (all plans), in Grok Build, and via the SpaceXAI console; not yet available in the EU.</p>
+
+<h4>Why it's trending</h4>
+<p>It's the first tangible proof point for a thesis the industry has been arguing about since the Cursor deal was announced: that a model trained specifically on a popular IDE's real usage data — not just web-scale text — can out-perform general frontier training on agentic/terminal coding benchmarks, at a fraction of the price. Combined with GPT-5.6's rollout and Meta's Muse Spark 1.1 (below) landing the same week, three major labs shipped agent-capable coding models within days of each other, and developers are debating openly whether IDE vendors without their own model now face a structural disadvantage against a vertically integrated Cursor+SpaceXAI stack.</p>
+
+<h4>Hands-on tutorial: build your own terminal-bench, not their headline number</h4>
+<ol>
+  <li>If you already use Cursor: open Settings → Models and enable <strong>Grok 4.5</strong> (rolled out to all Cursor plans as of July 8). Run it against real work for an afternoon, not a toy repo.</li>
+  <li>For direct API access, xAI's endpoint has long been OpenAI-SDK-compatible — point the SDK's <code>base_url</code> at it and swap the model string; nothing else in your code changes:
+<pre><code>import os
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ["XAI_API_KEY"], base_url="https://api.x.ai/v1")
+resp = client.chat.completions.create(
+    model="grok-4.5",
+    messages=[{"role": "user", "content": "Fix the flaky test in tests/test_retry.py and explain why it was flaky."}],
+)
+print(resp.choices[0].message.content)</code></pre></li>
+  <li>Terminal-Bench's 83.3% is measured on Cursor-shaped coding tasks — build your own 5-task mini-eval from your actual backlog (a real flaky test, a real migration, a real CLI bug) and run it against both Grok 4.5 and your current default model.</li>
+  <li><strong>Expected result:</strong> a verdict grounded in your own repo, and specifically check whether the on-paper 60–76% price advantage survives contact with however many retries each model needs on your tasks — a cheaper model that needs 3× the turns isn't actually cheaper.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://mlq.ai/news/spacexai-launches-grok-45-coding-model-undercutting-anthropic-on-price-after-60b-cursor-deal/">MLQ News: SpaceXAI launches Grok 4.5, undercutting Anthropic on price</a></li>
+  <li><a href="https://www.bloomberg.com/news/articles/2026-07-08/spacexai-cursor-unveil-grok-ai-model-for-legal-finance-tasks">Bloomberg: SpaceXAI, Cursor launch Grok 4.5</a></li>
+  <li><a href="https://www.axios.com/2026/07/08/spacexai-grok-new-model">Axios: SpaceXAI launches new model, Grok 4.5</a></li>
+</ul>
+</article>
+
+<article class="topic" id="meta-muse-spark-11"
+  data-title="Meta Muse Spark 1.1: an Agent-Native Model at a Quarter the Frontier Price"
+  data-date="2026-07-11" data-tag="Agents" data-emoji="🕸️" data-hue="235"
+  data-blurb="Meta's first paid agent API — the same model instance runs as orchestrator or delegated subagent, priced at $1.25/$4.25 per M tokens. A live test case for this week's Multi-Agent Architectures module.">
+<p class="stamp">date added: 2026-07-11</p>
+
+<h4>What it is</h4>
+<p>Meta opened a paid API for <strong>Muse Spark 1.1</strong> on July 9–10, its first agentic model sold as a metered product rather than released as open weights — a real strategy reversal for Meta. Pricing: $1.25 per million input tokens / $4.25 per million output, roughly a quarter of current Anthropic/OpenAI flagship rates, with $20 in free credit on signup. The public preview is US-only and deliberately kept off third-party routers like OpenRouter for now. The differentiator Meta is pushing hardest: the same model instance can act as a <strong>primary orchestrator or a delegated subagent</strong> within a larger multi-agent system, with claimed zero-shot generalization to new tools, MCP servers, and custom skills — one model, either role, no separate fine-tune per role.</p>
+
+<h4>Why it's trending</h4>
+<p>It landed the same week as GPT-5.6 and Grok 4.5 (above), turning this into the most crowded week of agent-capable model launches this year, and it's the first time Meta has tried to charge for a frontier-adjacent model rather than give it away — a signal worth watching if you've built anything on the assumption that Meta's models stay free. The orchestrator-or-subagent claim also lands directly on an active architectural debate: this Field Manual's Module 03, published the same day, spends an entire module on when isolating a subagent's context is worth the coordination tax it costs — Meta is effectively claiming one model can play both sides of that tax cheaply, which is exactly the kind of claim worth falsifying yourself before trusting it.</p>
+
+<h4>Hands-on tutorial: test the orchestrator-and-subagent claim directly</h4>
+<ol>
+  <li>Sign up for the US preview and claim the $20 credit.</li>
+  <li>Take Module 03's <code>SubagentBrief</code>/<code>Finding</code> shape (<a href="manual/module-03.html">this site's Multi-Agent Architectures module</a>, §3.4) and point both the coordinator call and the worker calls at Muse Spark 1.1 — same model, two roles, one run.</li>
+  <li>Run the same task through your existing coordinator+worker stack (whatever model you use today) and compare: accuracy against a golden answer, total tokens, and whether a single model playing both roles introduces any of Module 03 §3.6's failure modes (lost-in-the-brief, redundant fetches) more often than a bigger model dedicated to just the coordinator role.</li>
+  <li><strong>Expected result:</strong> a real number for whether "one model, either role" holds up on your task, or whether the claim is stronger in Meta's benchmark than in a coordination-heavy task with real handoffs.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://www.techtimes.com/articles/320088/20260710/metas-muse-spark-11-opens-paid-api-one-quarter-anthropic-openai-rates.htm">TechTimes: Muse Spark 1.1 opens paid API at a quarter of Anthropic/OpenAI rates</a></li>
+  <li><a href="https://the-decoder.com/metas-muse-spark-1-1-api-pricing-squeezes-openai-and-anthropic-as-the-ai-price-war-heats-up/">The Decoder: Muse Spark 1.1 pricing squeezes OpenAI and Anthropic</a></li>
+  <li><a href="https://www.datacamp.com/blog/muse-spark-1-1">DataCamp: Muse Spark 1.1 — Meta's agentic model and API</a></li>
+</ul>
+</article>
+
+<article class="topic" id="langflow-rce-ai-ransomware"
+  data-title="An AI Agent Ran an Entire Ransomware Chain Through a Langflow RCE — No Human in the Loop"
+  data-date="2026-07-11" data-tag="Security" data-emoji="🚨" data-hue="350"
+  data-blurb="A missing-auth RCE in Langflow, a default MinIO password, and a five-year-old Nacos bypass — chained autonomously into a full extortion run. The three checks to run against your own agent stack today.">
+<p class="stamp">date added: 2026-07-11</p>
+
+<h4>What it is</h4>
+<p>Security researchers documented an attack, tracked as <strong>JADEPUFFER</strong>, in which an autonomous AI agent exploited <strong>CVE-2025-3248</strong> — a missing-authentication remote-code-execution flaw in Langflow, a popular open-source tool for building AI agent workflows — to get unauthenticated code execution on an internet-facing server. From there the agent pivoted to a MinIO storage instance still running its factory-default login (<code>minioadmin:minioadmin</code>), then to a separate server running MySQL and Alibaba's Nacos service registry, where it used a 2021 authentication-bypass (<strong>CVE-2021-29441</strong>) and a default signing key Nacos has shipped unchanged since 2020 to plant its own admin account. It encrypted all 1,342 Nacos configuration entries, dropped the original database tables, and left a Bitcoin ransom note. Researchers' read: the agent made real-time tactical decisions chaining these steps together, not a scripted human-authored playbook.</p>
+
+<h4>Why it's trending</h4>
+<p>It's being read as a watershed case of an agent executing a complete intrusion-to-extortion chain on its own, distinct from earlier reports of AI merely advising human attackers. It lands directly on this audience: anyone running Langflow, LangGraph, or a comparable agent-building tool internally — and connecting it to adjacent infrastructure like object storage or a service registry — is looking at the exact shape of surface this attack used. None of the three components (Langflow's missing auth, MinIO's default password, Nacos's unrotated signing key) is exotic; the news is that an agent chained all three unattended.</p>
+
+<h4>Hands-on tutorial: run this attack's checklist against your own stack</h4>
+<ol>
+  <li>Check your Langflow version — <code>pip show langflow</code>, or your container image tag. Anything before <strong>1.3.0</strong> carries CVE-2025-3248; patch immediately if the instance is reachable from outside a trusted network.</li>
+  <li>Grep your infrastructure for the two "supporting service nobody rotates" credentials this chain actually used: any MinIO deployment still on <code>minioadmin:minioadmin</code>, and any Nacos instance still on its default signing key (shipped unchanged since 2020) rather than a generated one.</li>
+  <li>Check the network path, not just the endpoint: does your agent-framework server have a direct route to your database's admin control plane (Nacos, Consul, etc.)? That direct path is the lateral-movement step that turned one RCE into a full data-destruction run — segment it regardless of whether Langflow itself is patched.</li>
+  <li><strong>Expected result:</strong> one version check, one grep, and one look at a network diagram — a concrete morning's work, not a vague "be more careful with agent tooling" takeaway. If you're building your own harness rather than running a packaged tool, this is a live argument for the typed-proposal-boundary and blast-radius-first permissioning this Field Manual's Module 02 covers: an agent-facing surface with unauthenticated RCE is the boundary failing before the agent even gets involved.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://thehackernews.com/2026/07/ai-agent-exploits-langflow-rce-to.html">The Hacker News: AI agent exploits Langflow RCE to automate database ransomware attack</a></li>
+  <li><a href="https://www.securityweek.com/agentic-ai-used-to-conduct-ransomware-attack-via-langflow/">SecurityWeek: Agentic AI used to conduct ransomware attack via Langflow</a></li>
+  <li><a href="https://www.csoonline.com/article/4193195/this-ai-agent-autonomously-hacked-a-network-adapted-on-the-fly-and-demanded-a-ransom.html">CSO Online: This AI agent autonomously hacked a network, adapted on the fly, and demanded a ransom</a></li>
+</ul>
+</article>
 
 <article class="topic" id="gpt-56-sol-terra-luna"
   data-title="GPT-5.6 Sol, Terra &amp; Luna: OpenAI's Three-Tier Family Lands in Limited Preview"
