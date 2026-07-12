@@ -1,4 +1,4 @@
-# Daily Run Prompt — AI Trends Learning Log + Agentic Systems Field Manual
+# Daily Run Prompt — AI Trends Learning Log + Curricula
 
 > This is the prompt for the automated daily task. Paste it (or point the scheduled task
 > at it) so each run — which has no memory of previous runs — knows exactly what to do.
@@ -10,17 +10,32 @@ The entire site is ONE file: `index.html` — a self-contained single-page app w
 design system (the bookmark-board look) and hash routing:
 
 - `#` → the Trends Board (bookmark cards); `#<article-id>` → an article in the reader.
-- `#manual` → the Field Manual home (dependency graph + site map + capstones), whose
-  markup lives in `<div id="manual-view">` inside index.html.
-- `#manual/module-NN` → a module page, rendered from
-  `<section class="module" id="module-NN" data-title="...">` elements stored inside
-  `<div id="manual-store">` in index.html.
+- `#curricula` → the curricula hub: one `.curr-card` per curriculum, each marked
+  `ACTIVE`, `PLANNED`, or `COMPLETE`. This is the registry of all curricula.
+- `#<curriculum-slug>` → a curriculum's home (dependency graph + site map + capstones),
+  a `<div class="curriculum-view" data-slug="..." data-name="...">` inside index.html.
+  The first curriculum is the Agentic Systems Field Manual, slug `manual`
+  (`<div id="manual-view">`).
+- `#<slug>/module-NN` → a module page, rendered from
+  `<section class="module" data-curriculum="<slug>" id="<slug>-module-NN"
+  data-title="...">` elements stored inside `<div id="manual-store">` in index.html.
+  (The `manual` curriculum's existing sections keep bare `module-NN` ids; the router
+  accepts both forms.)
 
 Details:
 
 - TRENDS: articles are `<article class="topic">` elements inside `<main id="articles">`
   (see the HTML comment at the top of index.html for the exact contract).
-- MANUAL: `module-00` in the store is the reference implementation of the module format —
+- CURRICULA: the site supports any number of curricula. Each is: a hub card in
+  `#curricula-view` + a `curriculum-view` div + module sections in the store. Exactly
+  ONE curriculum is ACTIVE at a time (it receives the daily module); PLANNED curricula
+  wait in the hub. When the active curriculum completes (all modules + capstones
+  published), mark its hub card `COMPLETE`, promote the next PLANNED card to `ACTIVE`,
+  draft its full brief (dependency graph, site-map cards with objectives/labs/prereqs/
+  depth estimates, capstone track — model it on the Field Manual's), and add its
+  curriculum-view div by copying `#manual-view`'s structure. The user can also
+  commission, re-order, or activate curricula early by request.
+- MODULE FORMAT: `module-00` in the store is the reference implementation —
   match it. `module-01` is the second reference point; it shows how a later module
   cross-links instead of repeating a mechanism Module 00 already covered, and how a topic
   spanning multiple system layers gets code for each layer (see "Full-stack code" below).
@@ -49,20 +64,28 @@ Details:
    (r/LocalLLaMA, r/artificial), Hacker News, and AI newsletters. Pick the 3–5 most
    notable NEW topics that are (a) genuinely new or newly popular, (b) learnable/buildable,
    (c) not already on the site.
+   The remit is ALL of AI, not just agents: agentic concepts, RAG/retrieval, AI security,
+   new models and architectures, dev tooling, research results, applied/creative uses —
+   anything genuinely new, important, and exciting. Introduce new `data-tag` values freely
+   when a topic doesn't fit an existing tag (chips are generated from tags in use).
 3. For each topic, append an `<article class="topic">` at the TOP of `<main id="articles">`
    with the required data attributes (`data-title`, `data-date`, `data-tag`, `data-emoji`,
    `data-hue`, `data-blurb`) and four sections: What it is · Why it's trending ·
    Hands-on tutorial (numbered steps, code in `<pre><code>`) · Go deeper (2–4 source links).
    Only include tutorial steps you're confident are correct.
 
-### Job 2 — Field Manual (curriculum stream)
+### Job 2 — Curricula (curriculum stream)
 
-Execute the **next queued module** in full depth — one module per run, in numeric order
-(M01, M02, … M15, then the three capstones as their own pages).
+Execute the **next queued module of the ACTIVE curriculum** in full depth — one module per
+run, in numeric order (modules first, then the capstones as their own pages). Check
+`#curricula-view` for which curriculum is ACTIVE; as of this revision it's the Agentic
+Systems Field Manual (slug `manual`). Planned next: RAG & Retrieval Systems, then
+AI Security Engineering (activation order can be changed by the user).
 
-1. Read `#manual-view` in index.html to find the lowest-numbered module still marked
-   QUEUED, and read its site-map card (objectives, lab, prereqs) — that card is the
-   module's brief.
+1. Read the active curriculum's view in index.html to find the lowest-numbered module
+   still marked QUEUED, and read its site-map card (objectives, lab, prereqs) — that card
+   is the module's brief. If the active curriculum just completed, follow the curriculum
+   promotion steps in "Repository layout" above instead of writing a module this run.
 2. Read the `module-00` and `module-01` sections in `#manual-store` in full. Together they
    are the format contract — module-00 for baseline structure, module-01 for how a later
    module should behave (cross-linking instead of repeating, full-stack code). Every module
@@ -121,18 +144,24 @@ Execute the **next queued module** in full depth — one module per run, in nume
    section substantially re-explains material `module-00.html` or an earlier module already
    covers instead of cross-linking it.
 5. Publish inside index.html (no new files):
-   - Append the new `<section class="module" id="module-NN" data-title="Module NN — …">`
-     at the TOP of `<div id="manual-store">`.
-   - In `#manual-view`: the module's graph node class `queued` → `published`, `href` →
-     `#manual/module-NN`, aria-label updated; the module's site-map card status →
-     `PUBLISHED <MM-DD>` with the title wrapped in a link to `#manual/module-NN`; the next
-     module's card status → `QUEUED · NEXT UP`; `#progress-pill` (`NN / 16 PUBLISHED`);
-     the hero doc-id REV date.
-   - Add a redirect stub at `manual/module-NN.html` pointing to
-     `../index.html#manual/module-NN` (copy an existing stub), so deep links stay valid.
+   - Append the new `<section class="module" data-curriculum="<slug>"
+     id="<slug>-module-NN" data-title="Module NN — …">` at the TOP of
+     `<div id="manual-store">`. (For the `manual` curriculum, keep the established bare
+     `id="module-NN"` form for consistency with its earlier modules.)
+   - In the curriculum's view: the module's graph node class `queued` → `published`,
+     `href` → `#<slug>/module-NN`, aria-label updated; the module's site-map card status →
+     `PUBLISHED <MM-DD>` with the title wrapped in a link to `#<slug>/module-NN`; the next
+     module's card status → `QUEUED · NEXT UP`; the progress pill (`NN / <total>
+     PUBLISHED`); the hero doc-id REV date.
+   - Update the curriculum's hub card in `#curricula-view` (the `ACTIVE · NN / <total>`
+     counter).
+   - For the `manual` curriculum only: add a redirect stub at `manual/module-NN.html`
+     pointing to `../index.html#manual/module-NN` (copy an existing stub), so old-style
+     deep links stay valid. New curricula don't get stub files.
 6. Update the previous module's pager "NEXT" link (inside its store section) from a
-   disabled span to `<a href="#manual/module-NN">`.
-7. Update the Trends Board banner's status line (`.mb-status`) — published count.
+   disabled span to `<a href="#<slug>/module-NN">`.
+7. Update the Trends Board banner's status line (`.mb-status`) — published count for the
+   active curriculum.
 
 ### Audience & voice (both jobs, especially the manual)
 
@@ -151,11 +180,12 @@ positions, then commit to a judgment with reasoning.
 
 1. Verify: open index.html in the headless browser (Playwright is preinstalled; chromium
    lives under `/opt/pw-browsers/`); confirm no console errors and that every route works —
-   board → `#<new-article-id>`, `#manual` (graph node for the new module is solid and
-   clickable), `#manual/module-NN` (renders, code tabs switch, pager links resolve) — and
-   take a screenshot of the new module and the board.
+   board → `#<new-article-id>`, `#curricula` (hub cards render, counters current),
+   `#<slug>` (graph node for the new module is solid and clickable), `#<slug>/module-NN`
+   (renders, code tabs switch, pager links resolve, back button names the right
+   curriculum) — and take a screenshot of the new module and the board.
 2. `git add -A && git commit` with message:
-   `Daily run <YYYY-MM-DD>: trends — <topics>; manual — Module NN <title>`
+   `Daily run <YYYY-MM-DD>: trends — <topics>; <curriculum-slug> — Module NN <title>`
 3. Push to the designated branch (see the session's branch instructions; do not push to
    other branches).
 4. Final summary: date, trend topics added (one line each), module published, total counts
@@ -168,4 +198,10 @@ positions, then commit to a judgment with reasoning.
 - Keep every page self-contained: no CDNs, no external fonts/scripts/images.
 - Accuracy over volume. Only ship tutorial steps and claims you're confident in; flag
   volatile claims with as-of dates.
-- Keep the two streams distinct: trends = what's hot today; manual = the stable curriculum.
+- Keep the two streams distinct: trends = what's hot today, across all of AI; curricula =
+  the stable, sequenced syllabi. A hot topic can appear in both — as a bookmark today and
+  as a module when its curriculum reaches it — but the article reacts to news while the
+  module teaches the discipline; cross-link rather than duplicate.
+- One curriculum ACTIVE at a time. Adding a curriculum = hub card first (PLANNED), full
+  brief + curriculum-view at activation. Never interleave modules from two curricula in
+  the same period unless the user asks for that explicitly.

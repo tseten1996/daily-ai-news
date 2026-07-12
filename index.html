@@ -8,24 +8,35 @@
   HOW THIS FILE WORKS (for future automated runs):
   This file is the ENTIRE site — a self-contained single-page app with two content
   streams and one design system, hash-routed:
-    #                    → bookmark board (trends)
-    #<article-id>        → article reader
-    #manual              → Field Manual home (dependency graph + site map)
-    #manual/module-NN    → a Field Manual module page
+    #                      → bookmark board (trends articles)
+    #<article-id>          → article reader
+    #curricula             → curricula hub (every curriculum, live + planned)
+    #<curriculum-slug>     → a curriculum's home (dependency graph + site map)
+    #<slug>/module-NN      → a curriculum module page
   - TRENDS: all articles live as <article class="topic"> elements inside
     <main id="articles"> near the bottom. To add a day's topics: append new articles
     at the TOP of that store, each with data-title, data-date (YYYY-MM-DD), data-tag,
     data-emoji, data-hue (0-360), and data-blurb. Never delete old articles.
     The board (cards, date groups, filters, counts) is generated automatically.
-  - FIELD MANUAL: the manual home markup lives in <div id="manual-view"> (graph nodes,
-    site-map cards, statuses, #progress-pill). Module content lives as
-    <section class="module" id="module-NN" data-title="..."> elements inside
-    <div id="manual-store">. To publish a module: append its section to the TOP of the
-    store, flip its graph node/card in #manual-view to published, and update the
-    next-up card, #progress-pill, and the banner .mb-status.
-    Internal links use hash routes only: #manual, #manual/module-NN, #<article-id>.
+    Remit: ALL of AI — agentic systems, RAG/retrieval, security, new models, tooling,
+    research — anything genuinely new, important, and learnable. Add new data-tag
+    values freely; chips are generated from the tags in use.
+  - CURRICULA: the hub lives in <div id="curricula-view"> (one .curr-card per
+    curriculum: ACTIVE / PLANNED / COMPLETE). Each curriculum's home is a
+    <div class="curriculum-view" data-slug="..." data-name="..."> (graph nodes,
+    site-map cards, statuses, progress pill). Module content lives as
+    <section class="module" data-curriculum="<slug>" id="<slug>-module-NN"
+    data-title="..."> elements inside <div id="manual-store"> (the original manual
+    curriculum's sections keep their bare "module-NN" ids; the router accepts both).
+    To publish a module: append its section to the TOP of the store, flip its graph
+    node/card in the curriculum's view to published, and update the next-up card, the
+    progress pill, and (for the active curriculum) the banner .mb-status.
+    To add a NEW curriculum: add its .curr-card to the hub, then at activation add its
+    curriculum-view div (copy #manual-view's structure) and start shipping modules.
+    Internal links use hash routes only: #curricula, #<slug>, #<slug>/module-NN,
+    #<article-id>.
   - The old manual/*.html files are redirect stubs kept for inbound links — new
-    modules do NOT get a file there; they go into #manual-store here.
+    modules do NOT get files there; everything routes through this file.
   - See SCHEDULED_TASK_PROMPT.md at the repo root for the full daily-run spec.
 -->
 <style>
@@ -548,6 +559,46 @@
   }
   .module-body .pager .disabled { color: var(--muted); }
 
+  /* --- Curricula hub --- */
+  #curricula-view { max-width: 1080px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+  #curricula-view header.hero { padding: 2rem 0 .4rem; }
+  #curricula-view header.hero h1 {
+    font-size: clamp(1.7rem, 4.5vw, 2.5rem); font-weight: 800;
+    letter-spacing: -.03em; line-height: 1.12; margin: .5rem 0 .8rem;
+  }
+  #curricula-view .sub { max-width: 68ch; color: var(--muted); font-size: 1.02rem; }
+  .curr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.1rem; margin-top: 1.6rem; }
+  .curr-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 1.15rem 1.25rem; box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+    color: inherit; text-decoration: none;
+  }
+  a.curr-card { transition: transform .18s ease, box-shadow .18s ease; }
+  a.curr-card:hover, a.curr-card:focus-visible { transform: translateY(-3px); box-shadow: var(--shadow-hover); outline: none; }
+  .curr-card.live { border: 1.6px solid var(--accent); }
+  .curr-card .row1 {
+    display: flex; justify-content: space-between; align-items: baseline; gap: .6rem; flex-wrap: wrap;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .1em; text-transform: uppercase;
+    margin-bottom: .45rem;
+  }
+  .curr-card .mid { color: var(--accent); font-weight: 700; }
+  .curr-card .status { font-weight: 700; }
+  .curr-card .status.pub { color: #157347; }
+  @media (prefers-color-scheme: dark) { .curr-card .status.pub { color: #4cc38a; } }
+  .curr-card .status.q { color: var(--queued); }
+  .curr-card h3 { margin: 0 0 .5rem; font-size: 1.08rem; line-height: 1.3; }
+  .curr-card p { margin: 0 0 .9rem; font-size: .88rem; color: var(--muted); line-height: 1.55; }
+  .curr-card .row2 {
+    margin-top: auto;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .68rem; letter-spacing: .06em; color: var(--muted);
+    border-top: 1px dashed var(--border); padding-top: .55rem;
+    display: flex; justify-content: space-between; gap: .6rem; flex-wrap: wrap;
+  }
+  .curr-note { margin-top: 1.5rem; color: var(--muted); font-size: .9rem; max-width: 78ch; }
+
   /* Hidden module store (JS reads innerHTML; noscript overrides) */
   #manual-store { display: none; }
 </style>
@@ -566,9 +617,9 @@
     <a class="manual-banner" href="#manual">
       <span class="mb-emoji">📐</span>
       <span>
-        <span class="mb-kicker">New · Structured Curriculum · One Module Ships Daily</span>
+        <span class="mb-kicker">Curricula · One Module Ships Daily · Now Reading: C01</span>
         <h2>The Agentic Systems Field Manual</h2>
-        <p>A 16-module, principal-level path through agentic AI — build it, apply it, consult on it. Labs, failure modes, and three-track code in every module.</p>
+        <p>A 16-module, principal-level path through agentic AI — build it, apply it, consult on it. Labs, failure modes, and three-track code in every module. More curricula (RAG, AI security) are queued behind it.</p>
       </span>
       <span class="mb-status"><b>M00–M04 PUBLISHED</b><br>11 QUEUED · OPEN →</span>
     </a>
@@ -610,12 +661,51 @@
   </a></p>
 </div>
 
-<div id="manual-view" hidden>
+<div id="curricula-view" hidden>
 <div class="view-nav">
   <a class="back-btn" href="#">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
     All bookmarks
   </a>
+</div>
+
+<header class="hero">
+  <div class="doc-id">CURRICULA · REV 2026-07-12</div>
+  <h1>Curricula</h1>
+  <p class="sub">Structured, multi-module learning paths — the slow, stable counterpart to the daily bookmark board. One curriculum is active at a time and ships one module per day; planned curricula queue up behind it and start when activated.</p>
+</header>
+
+<div class="curr-grid">
+  <a class="curr-card live" href="#manual">
+    <div class="row1"><span class="mid">C01 · AGENTIC SYSTEMS</span><span class="status pub">ACTIVE · 05 / 16</span></div>
+    <h3>The Agentic Systems Field Manual</h3>
+    <p>Senior-to-principal path through agentic AI — mental models, architectures, context engineering, MCP, harnesses, evals, production, consulting. 16 modules + 3 capstones; labs, failure modes, and three-track code throughout.</p>
+    <div class="row2"><span>ONE MODULE / DAY</span><span>OPEN →</span></div>
+  </a>
+  <div class="curr-card">
+    <div class="row1"><span class="mid">C02 · RETRIEVAL</span><span class="status q">PLANNED · COMMISSIONED 07-12</span></div>
+    <h3>RAG &amp; Retrieval Systems</h3>
+    <p>Retrieval as an engineering discipline: chunking and embeddings, hybrid search and reranking, retrieval evals, GraphRAG, agentic search vs. pre-indexed pipelines, and when a 2M-token window actually replaces any of it. Full brief drafted at activation.</p>
+    <div class="row2"><span>BEGINS WHEN ACTIVATED</span><span>QUEUED</span></div>
+  </div>
+  <div class="curr-card">
+    <div class="row1"><span class="mid">C03 · SECURITY</span><span class="status q">PLANNED · COMMISSIONED 07-12</span></div>
+    <h3>AI Security Engineering</h3>
+    <p>Defensive depth for AI systems: prompt injection and the lethal trifecta, sandboxing and permission design, supply-chain risk in models and tools, red-teaming your own agents, and governance that survives audit. Full brief drafted at activation.</p>
+    <div class="row2"><span>BEGINS WHEN ACTIVATED</span><span>QUEUED</span></div>
+  </div>
+</div>
+
+<p class="curr-note">Lifecycle: <span class="mono">PLANNED → ACTIVE (one module / day) → COMPLETE</span>. By default the next planned curriculum activates when the current one completes; any curriculum can be commissioned, re-ordered, or activated early by request. Fast-moving topics stay on the <a href="#">bookmark board</a> — curricula are for what deserves a syllabus.</p>
+</div>
+
+<div id="manual-view" class="curriculum-view" data-slug="manual" data-name="Agentic Systems Field Manual" hidden>
+<div class="view-nav">
+  <a class="back-btn" href="#">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+    All bookmarks
+  </a>
+  <a class="back-btn" href="#curricula">All curricula</a>
 </div>
 
 <header class="hero">
@@ -1012,9 +1102,9 @@
 
 <div id="module-view" hidden>
 <div class="view-nav">
-  <a class="back-btn" href="#manual">
+  <a class="back-btn" id="module-back" href="#manual">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
-    Field Manual
+    <span>Agentic Systems Field Manual</span>
   </a>
   <a class="back-btn" href="#">All bookmarks</a>
 </div>
@@ -1556,14 +1646,16 @@ opencode</code></pre>
 </main>
 
 <!-- ======================================================================
-     FIELD MANUAL STORE — daily runs append the next published module
-     as a <section class="module" id="module-NN" data-title="..."> at the TOP.
-     Content is the full module body (header.mod ... nav.pager), links as
-     hash routes (#manual, #manual/module-NN). Front-matter comment stays.
+     MODULE STORE (all curricula) — daily runs append the next published module as a
+     <section class="module" data-curriculum="<slug>" id="<slug>-module-NN"
+     data-title="..."> at the TOP. (The original manual curriculum's sections keep
+     bare "module-NN" ids; the router accepts both forms.)
+     Content is the full module body (header.mod ... nav.pager), links as hash
+     routes (#<slug>, #<slug>/module-NN). Front-matter comment stays.
      ====================================================================== -->
 <div id="manual-store">
 
-<section class="module" id="module-04" data-title="Module 04 — Context Engineering">
+<section class="module" data-curriculum="manual" id="module-04" data-title="Module 04 — Context Engineering">
 <!--
   FRONT MATTER (for the ledger — see SCHEDULED_TASK_PROMPT.md / daily-run spec)
   title: Context Engineering
@@ -2169,7 +2261,7 @@ async def budget_stream(session_id: str):
 </nav>
 </section>
 
-<section class="module" id="module-03" data-title="Module 03 — Multi-Agent Architectures">
+<section class="module" data-curriculum="manual" id="module-03" data-title="Module 03 — Multi-Agent Architectures">
 <!--
   FRONT MATTER (for the ledger — see SCHEDULED_TASK_PROMPT.md / daily-run spec)
   title: Multi-Agent Architectures
@@ -2646,7 +2738,7 @@ export function SubagentTree({ jobId }: { jobId: string }) {
 </nav>
 </section>
 
-<section class="module" id="module-02" data-title="Module 02 — Single-Agent Architectures">
+<section class="module" data-curriculum="manual" id="module-02" data-title="Module 02 — Single-Agent Architectures">
 <!--
   FRONT MATTER (for the ledger — see SCHEDULED_TASK_PROMPT.md / daily-run spec)
   title: Single-Agent Architectures
@@ -3156,7 +3248,7 @@ while True:  # Module 00's guards (turn cap, budget) still wrap all of this
 </nav>
 </section>
 
-<section class="module" id="module-01" data-title="Module 01 — Reasoning &amp; Thought Processes">
+<section class="module" data-curriculum="manual" id="module-01" data-title="Module 01 — Reasoning &amp; Thought Processes">
 <!--
   FRONT MATTER (for the ledger — see SCHEDULED_TASK_PROMPT.md / daily-run spec)
   title: Reasoning & Thought Processes
@@ -3603,7 +3695,7 @@ if (!parsed.success) escalate();   // same rule: fail closed, never coerce</code
 </nav>
 </section>
 
-<section class="module" id="module-00" data-title="Module 00 — Mental Models: What an Agent Actually Is">
+<section class="module" data-curriculum="manual" id="module-00" data-title="Module 00 — Mental Models: What an Agent Actually Is">
 <header class="mod">
   <div class="doc-id">FM-00 · Foundations</div>
   <h1>Mental Models: What an Agent Actually Is</h1>
@@ -4155,13 +4247,23 @@ String answer = ChatClient.create(chatModel)
     return card;
   }
 
-  /* ---- Hash routing: board · article reader · manual home · module ---- */
-  var manualView = document.getElementById('manual-view');
+  /* ---- Hash routing: board · article · curricula hub · curriculum home · module ----
+     Route grammar (any number of curricula):
+       #curricula                 → hub listing every curriculum
+       #<slug>                    → a curriculum's home (div.curriculum-view[data-slug])
+       #<slug>/module-NN          → a module (section.module[data-curriculum=<slug>],
+                                    id "<slug>-module-NN", or bare "module-NN" for the
+                                    original manual curriculum)
+       #<slug>/<other-id>         → curriculum home, scrolled to that element (brief cards)
+       anything else              → article reader or board                      */
+  var curriculaView = document.getElementById('curricula-view');
   var moduleView = document.getElementById('module-view');
   var moduleBody = document.getElementById('module-body');
+  var moduleBack = document.getElementById('module-back');
+  var curriculumViews = Array.prototype.slice.call(document.querySelectorAll('.curriculum-view'));
 
   function showOnly(el) {
-    [home, reader, manualView, moduleView].forEach(function (x) {
+    [home, reader, curriculaView, moduleView].concat(curriculumViews).forEach(function (x) {
       if (x) x.hidden = (x !== el);
     });
   }
@@ -4169,17 +4271,35 @@ String answer = ChatClient.create(chatModel)
   function route() {
     var raw = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
 
-    if (raw === 'manual' || raw.indexOf('manual/') === 0) {
-      var slug = raw === 'manual' ? '' : raw.slice('manual/'.length);
-      var node = slug ? document.getElementById(slug) : null;
-      if (node && node.classList.contains('module')) {
+    if (raw === 'curricula') {
+      showOnly(curriculaView);
+      document.title = 'Curricula — AI Trends Learning Log';
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    var slash = raw.indexOf('/');
+    var slug = slash === -1 ? raw : raw.slice(0, slash);
+    var rest = slash === -1 ? '' : raw.slice(slash + 1);
+    var cv = null;
+    for (var i = 0; i < curriculumViews.length; i++) {
+      if (curriculumViews[i].dataset.slug === slug) cv = curriculumViews[i];
+    }
+
+    if (cv) {
+      var node = rest
+        ? (document.getElementById(slug + '-' + rest) || document.getElementById(rest))
+        : null;
+      if (node && node.classList.contains('module') && node.dataset.curriculum === slug) {
         moduleBody.innerHTML = node.innerHTML;
+        moduleBack.href = '#' + slug;
+        moduleBack.querySelector('span').textContent = cv.dataset.name || 'Curriculum';
         showOnly(moduleView);
-        document.title = (node.dataset.title || 'Module') + ' · Agentic Systems Field Manual';
+        document.title = (node.dataset.title || 'Module') + ' · ' + (cv.dataset.name || 'Curriculum');
         window.scrollTo(0, 0);
       } else {
-        showOnly(manualView);
-        document.title = 'The Agentic Systems Field Manual — AI Trends Learning Log';
+        showOnly(cv);
+        document.title = (cv.dataset.name || 'Curriculum') + ' — AI Trends Learning Log';
         if (node) node.scrollIntoView(); else window.scrollTo(0, 0);
       }
       return;
