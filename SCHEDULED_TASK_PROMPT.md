@@ -4,30 +4,41 @@
 > at it) so each run — which has no memory of previous runs — knows exactly what to do.
 > The repo itself is the state: read it first, then extend it.
 
-## Repository layout
+## Repository layout — SINGLE-PAGE APP (since 2026-07-12)
 
-- `index.html` — the Trends Board: a bookmark-card site of daily AI trends. Self-updating
-  UI; new topics are appended as `<article>` elements (see the HTML comment at the top of
-  the file for the exact contract).
-- `manual/index.html` — the Field Manual home: interactive module dependency graph +
-  site map of all 16 modules + capstone track. Contains each module's status.
-- `manual/module-NN.html` — one page per published module. `manual/module-00.html` is the
-  reference implementation of the format — match it. `manual/module-01.html` is the second
-  reference point; it shows how a later module cross-links instead of repeating a mechanism
-  Module 00 already covered, and how a topic spanning multiple system layers gets code for
-  each layer (see "Full-stack code" below).
-- Every module file opens with an HTML comment **front-matter block** (before `<style>`):
-  `title`, `slug` (matches the filename), `pillar` (the module's category label from its
-  site-map card in `manual/index.html` — FOUNDATIONS / ARCHITECTURE / INTEGRATION / RUNTIME
-  / ASSURANCE / PRODUCTION / APPLIED / CONSULTING — plus a short topic gloss, e.g.
-  "Reasoning & Context Engineering"), `difficulty` (Foundations / Practitioner / Principal —
-  M00–M01 are Foundations, most of the rest are Practitioner, the capstones and consulting
-  modules are Principal), `series` ("The Agentic Systems Field Manual (module N of 16 + 3
-  capstones)"), `tags` (3–6, comma-separated), a one-sentence `meta description`, and
-  estimated `read time`. This is metadata for future runs and any outside tooling that
-  indexes the manual — it is not rendered on the page.
-- All pages are self-contained (inline CSS/JS, no external dependencies, light/dark via
-  `prefers-color-scheme`).
+The entire site is ONE file: `index.html` — a self-contained single-page app with one
+design system (the bookmark-board look) and hash routing:
+
+- `#` → the Trends Board (bookmark cards); `#<article-id>` → an article in the reader.
+- `#manual` → the Field Manual home (dependency graph + site map + capstones), whose
+  markup lives in `<div id="manual-view">` inside index.html.
+- `#manual/module-NN` → a module page, rendered from
+  `<section class="module" id="module-NN" data-title="...">` elements stored inside
+  `<div id="manual-store">` in index.html.
+
+Details:
+
+- TRENDS: articles are `<article class="topic">` elements inside `<main id="articles">`
+  (see the HTML comment at the top of index.html for the exact contract).
+- MANUAL: `module-00` in the store is the reference implementation of the module format —
+  match it. `module-01` is the second reference point; it shows how a later module
+  cross-links instead of repeating a mechanism Module 00 already covered, and how a topic
+  spanning multiple system layers gets code for each layer (see "Full-stack code" below).
+- Every module section opens with an HTML comment **front-matter block**: `title`, `slug`,
+  `pillar` (the module's category label from its site-map card in `#manual-view` —
+  FOUNDATIONS / ARCHITECTURE / INTEGRATION / RUNTIME / ASSURANCE / PRODUCTION / APPLIED /
+  CONSULTING — plus a short topic gloss), `difficulty` (Foundations / Practitioner /
+  Principal), `series` ("The Agentic Systems Field Manual (module N of 16 + 3 capstones)"),
+  `tags` (3–6, comma-separated), a one-sentence `meta description`, and estimated
+  `read time`. Metadata for future runs and outside tooling — not rendered.
+- Module CSS is shared and already in index.html (`.module-body …` rules — figures,
+  code-tabs, judgment/failure blocks, tables, lab blocks, pager). New modules add NO CSS
+  and NO `<script>`; tab switching is a delegated handler that already exists. All internal
+  links are hash routes: `#manual`, `#manual/module-NN`, `#<article-id>`.
+- `manual/*.html` are redirect stubs kept for old inbound links. New modules do NOT create
+  files there — they go into `#manual-store` in index.html only.
+- The page stays self-contained: inline CSS/JS, no external dependencies, light/dark via
+  `prefers-color-scheme`.
 
 ## Every daily run does two jobs
 
@@ -49,15 +60,16 @@
 Execute the **next queued module** in full depth — one module per run, in numeric order
 (M01, M02, … M15, then the three capstones as their own pages).
 
-1. Read `manual/index.html` to find the lowest-numbered module still marked QUEUED, and
-   read its site-map card (objectives, lab, prereqs) — that card is the module's brief.
-2. Read `manual/module-00.html` and `manual/module-01.html` in full. Together they are the
-   format contract — module-00 for baseline structure, module-01 for how a later module
-   should behave (cross-linking instead of repeating, full-stack code). Every module page
-   must include, in this structure and visual style:
+1. Read `#manual-view` in index.html to find the lowest-numbered module still marked
+   QUEUED, and read its site-map card (objectives, lab, prereqs) — that card is the
+   module's brief.
+2. Read the `module-00` and `module-01` sections in `#manual-store` in full. Together they
+   are the format contract — module-00 for baseline structure, module-01 for how a later
+   module should behave (cross-linking instead of repeating, full-stack code). Every module
+   section must include, in this structure and visual style:
    - Front-matter HTML comment (see "Repository layout" above).
-   - Topbar breadcrumb, doc-id header (`FM-NN`), title, one-line summary, meta row
-     (published date, depth, prereqs, lab).
+   - Doc-id header (`FM-NN`), title, one-line summary, meta row (published date, depth,
+     prereqs, lab) — no topbar; the SPA supplies navigation.
    - Numbered sections (`§ N.0` orientation first). **The orientation's opening 2–4
      sentences must land on a concrete production scenario, symptom, or failure — never a
      bare definition.** ("The orchestrator's fourth subagent re-read the same 40k-token
@@ -100,22 +112,26 @@ Execute the **next queued module** in full depth — one module per run, in nume
    as-of dates on anything volatile. Target the depth estimate on the module's card — this
    format runs long by design (~4,500–5,500 words is normal); don't compress it to fit a
    generic blog-post length.
-4. Self-check before writing `manual/index.html` updates — reject and silently rewrite the
-   draft if any of these fail: (a) the orientation's opening reads as a definition, not a
+4. Self-check before updating `#manual-view` — reject and silently rewrite the draft if
+   any of these fail: (a) the orientation's opening reads as a definition, not a
    scenario; (b) any code example would not run as written; (c) fewer than three failure
    modes; (d) a Judgment Call restates the body instead of giving a decision rule; (e) the
    module reads like it could appear on any generic AI blog; (f) the code covers only the
    agent loop with no transport/UI/data connection (see the full-stack rule above); (g) any
    section substantially re-explains material `module-00.html` or an earlier module already
    covers instead of cross-linking it.
-5. Update `manual/index.html`:
-   - The module's graph node: class `queued` → `published`, `href` → `module-NN.html`,
-     aria-label updated.
-   - The module's site-map card: status → `PUBLISHED <MM-DD>`, title wrapped in a link to
-     the module page.
-   - The next module's card status → `QUEUED · NEXT UP`.
-   - The topbar progress pill (`NN / 16 PUBLISHED`).
-6. Update the previous module's pager "NEXT" link to point at the newly published page.
+5. Publish inside index.html (no new files):
+   - Append the new `<section class="module" id="module-NN" data-title="Module NN — …">`
+     at the TOP of `<div id="manual-store">`.
+   - In `#manual-view`: the module's graph node class `queued` → `published`, `href` →
+     `#manual/module-NN`, aria-label updated; the module's site-map card status →
+     `PUBLISHED <MM-DD>` with the title wrapped in a link to `#manual/module-NN`; the next
+     module's card status → `QUEUED · NEXT UP`; `#progress-pill` (`NN / 16 PUBLISHED`);
+     the hero doc-id REV date.
+   - Add a redirect stub at `manual/module-NN.html` pointing to
+     `../index.html#manual/module-NN` (copy an existing stub), so deep links stay valid.
+6. Update the previous module's pager "NEXT" link (inside its store section) from a
+   disabled span to `<a href="#manual/module-NN">`.
 7. Update the Trends Board banner's status line (`.mb-status`) — published count.
 
 ### Audience & voice (both jobs, especially the manual)
@@ -133,9 +149,11 @@ positions, then commit to a judgment with reasoning.
 
 ## Finish every run
 
-1. Verify: open the changed pages in the headless browser (Playwright is preinstalled;
-   chromium lives under `/opt/pw-browsers/`); confirm no console errors, nav works
-   (board → article, graph node → module, tabs switch), and take a screenshot.
+1. Verify: open index.html in the headless browser (Playwright is preinstalled; chromium
+   lives under `/opt/pw-browsers/`); confirm no console errors and that every route works —
+   board → `#<new-article-id>`, `#manual` (graph node for the new module is solid and
+   clickable), `#manual/module-NN` (renders, code tabs switch, pager links resolve) — and
+   take a screenshot of the new module and the board.
 2. `git add -A && git commit` with message:
    `Daily run <YYYY-MM-DD>: trends — <topics>; manual — Module NN <title>`
 3. Push to the designated branch (see the session's branch instructions; do not push to
