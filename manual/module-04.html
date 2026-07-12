@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 04 — Context Engineering · Agentic Systems Field Manual</title>
+<!--
+  FRONT MATTER (for the ledger — see SCHEDULED_TASK_PROMPT.md / daily-run spec)
+  title: Context Engineering
+  slug: module-04-context-engineering
+  pillar: Reasoning & Context Engineering (Field Manual Module 04, Architecture track)
+  difficulty: Practitioner
+  series: The Agentic Systems Field Manual (module 5 of 16 + 3 capstones)
+  tags: context-engineering, compaction, context-editing, memory-tiers, context-rot, progressive-disclosure
+  meta description: The context window as a budget, not a warehouse — compaction and server-side context editing, four memory tiers with a real store behind them, the poisoning/distraction/confusion/clash pathology of degraded sessions, and progressive disclosure — with runtime, data, and transport code.
+  read time: ~23 min (~5,200 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  /* Top bar */
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  /* Figures */
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  /* Code tabs */
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  /* Judgment call sidebar */
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  /* Failure modes */
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  /* Tables */
+  .tbl-wrap { overflow-x: auto; margin: 1.4rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; background: var(--panel); }
+  th {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    text-align: left; color: var(--muted);
+    border-bottom: 2px solid var(--ink);
+    padding: .55rem .7rem;
+  }
+  td { border-bottom: 1px solid var(--border); padding: .6rem .7rem; vertical-align: top; }
+  td:first-child { font-weight: 700; white-space: nowrap; }
+
+  /* Lab / checklist blocks */
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← Field Manual</a>
+  <span>AGENTIC SYSTEMS FIELD MANUAL · MODULE 04 / 15</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">FM-04 · Architecture</div>
+  <h1>Context Engineering</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">The window is a budget, not a warehouse: compaction and server-side context editing, four memory tiers with a real store behind them, the pathology of degraded sessions, and progressive disclosure.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-12</b></span>
+    <span>DEPTH <b>~5,200 words</b></span>
+    <span>PREREQS <b>Module 02</b></span>
+    <span>LAB <b>loopbot survives a 100-turn session</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§ 4.0</span> Orientation</h2>
+<p>Around turn 55 of a schema-migration session, the agent re-read a config file it had already read three times, "discovered" a constraint it had itself written down at turn 12, and then — worse — cited a table name that never existed, because a hallucinated name from turn 30 had been sitting in the transcript ever since, quietly promoted from guess to fact by repetition. Nothing crashed. Cost per turn kept climbing, answer quality kept sliding, and no log line said why. If you've operated a long-running agent, you've watched this: the model didn't get dumber, <strong>its context did</strong>.</p>
+<p>Module 00 flagged tool-output truncation as a context-budget decision and Module 02 §2.3 showed how to layer the system prompt and inject dynamic context per turn. This module is where those threads become a discipline: treating everything inside the window as a budgeted, curated, perishable resource. Four moves cover the territory — budget the window (§4.1), edit and compact it as sessions run long (§4.2), move durable knowledge out of it into memory tiers (§4.3), and recognize the specific ways sessions degrade so you can diagnose them from a trace instead of vibes (§4.4). Progressive disclosure (§4.5) ties the moves together into the load-bearing default.</p>
+
+<h2><span class="sec">§ 4.1</span> The window is a budget, not a warehouse</h2>
+<p>Every token in the window pays rent twice: once in dollars (input tokens on every subsequent call — an agent that carries 150k tokens through 40 more turns bills those tokens 40 more times) and once in attention. Model quality degrades as input grows, and it starts degrading <em>well before</em> the advertised limit: Chroma's context-rot study measured all 18 frontier models it tested getting measurably worse on tasks as input length grew, even trivially simple tasks, long before hitting any hard cap. A 200k-token window is not 200k tokens of equally usable space; it's a small high-fidelity core plus a long tail of increasingly mushy recall. Treat vendor window sizes as an upper bound on what fits, never as a target for what to load.</p>
+<p>Budgeting starts with knowing what the window actually holds. For a mid-session agent it's roughly: system prompt and tool definitions (fixed overhead — 20 tool schemas can quietly cost 10–15k tokens before anything happens), conversation turns, tool results (usually the dominant and fastest-growing segment), and whatever you injected — retrieved documents, memory, scratch state. If you can't print this breakdown per turn, you're not engineering context, you're hoping. The runtime code in §4.3 emits exactly this <code>BudgetReport</code> after every turn, and the transport layer streams it to a gauge you can watch.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 330" role="img" aria-label="The context window drawn as a budget: a stacked bar of system prompt, tool definitions, conversation, tool results and headroom, fed by three sourcing strategies — in-context upfront, retrieved just-in-time, computed summaries — with a warning that quality degrades before the hard limit.">
+  <defs>
+    <marker id="c1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <!-- three sources -->
+  <rect x="20" y="30" width="220" height="52" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/>
+  <text x="130" y="50" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--ink)">IN-CONTEXT (upfront)</text>
+  <text x="130" y="66" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">system prompt · tool schemas · core memory</text>
+  <rect x="20" y="100" width="220" height="52" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/>
+  <text x="130" y="120" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--ink)">RETRIEVED (just-in-time)</text>
+  <text x="130" y="136" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">tool calls fetch on demand · IDs not payloads</text>
+  <rect x="20" y="170" width="220" height="52" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/>
+  <text x="130" y="190" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--ink)">COMPUTED (derived)</text>
+  <text x="130" y="206" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">compaction summaries · notes · digests</text>
+  <line x1="240" y1="56" x2="330" y2="90" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#c1)"/>
+  <line x1="240" y1="126" x2="330" y2="126" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#c1)"/>
+  <line x1="240" y1="196" x2="330" y2="165" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#c1)"/>
+  <!-- the window as stacked bar -->
+  <text x="340" y="50" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">THE WINDOW (one turn's input)</text>
+  <rect x="340" y="60" width="520" height="140" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.6"/>
+  <rect x="340" y="60" width="70" height="140" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1"/>
+  <text x="375" y="125" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)" transform="rotate(-90 375 125)">system + tools</text>
+  <rect x="410" y="60" width="55" height="140" fill="none" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="437" y="125" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)" transform="rotate(-90 437 125)">memory core</text>
+  <rect x="465" y="60" width="110" height="140" fill="none" stroke="var(--border)" stroke-width="1"/>
+  <text x="520" y="125" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)" transform="rotate(-90 520 125)">conversation</text>
+  <rect x="575" y="60" width="185" height="140" fill="none" stroke="var(--warn)" stroke-width="1"/>
+  <text x="667" y="118" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--warn)" font-weight="700">tool results</text>
+  <text x="667" y="133" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">dominant + fastest-growing —</text>
+  <text x="667" y="146" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">first target for editing (§4.2)</text>
+  <rect x="760" y="60" width="100" height="140" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="5 4"/>
+  <text x="810" y="125" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)" transform="rotate(-90 810 125)">headroom</text>
+  <!-- rot curve -->
+  <path d="M340 265 C 480 268, 640 280, 860 305" fill="none" stroke="var(--warn)" stroke-width="1.6" stroke-dasharray="6 4"/>
+  <line x1="340" y1="240" x2="340" y2="310" stroke="var(--border)" stroke-width="1"/>
+  <line x1="340" y1="310" x2="860 " y2="310" stroke="var(--border)" stroke-width="1"/>
+  <text x="345" y="252" class="svg-label" font-size="9" fill="var(--muted)">recall / instruction-following quality</text>
+  <text x="600" y="302" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--warn)" font-weight="700">degrades with input length — long before the advertised limit (context rot)</text>
+  <text x="855" y="325" text-anchor="end" class="svg-label" font-size="9" fill="var(--muted)">tokens in window →</text>
+</svg>
+<figcaption><b>FIG 4.1</b> — The window as a budget. Three sourcing strategies fill it; tool results dominate its growth; quality falls off a dashed cliff long before the hard cap. Headroom is a feature you defend, not waste you fill.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  U[In-context: upfront<br/>system + tools + core] --> W[Window per turn]
+  R[Retrieved: just-in-time<br/>tools fetch on demand] --> W
+  C[Computed: derived<br/>summaries + notes] --> W
+  W --> Q{quality}
+  Q -. degrades with length,<br/>before the limit .-> W</pre>
+</details>
+</figure>
+
+<p>The three sourcing strategies on the figure's left edge are the actual design decision, made per piece of information:</p>
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Strategy</th><th>What goes here</th><th>Cost profile</th><th>Canonical mistake</th></tr></thead>
+  <tbody>
+    <tr><td>In-context (upfront)</td><td>Identity, rules, tool schemas, the small always-relevant core (user prefs, session goal)</td><td>Paid every turn, every session — but prompt-cacheable if it stays stable at the prefix</td><td>Stuffing "might need it" documents upfront; every speculative token is rent paid on nothing</td></tr>
+    <tr><td>Retrieved (just-in-time)</td><td>Files, records, search results — fetched by a tool when the task actually needs them</td><td>Paid only when used; costs a tool-call turn of latency</td><td>Returning full payloads when an identifier + summary would do; unbounded tool outputs (Module 00's truncation rule)</td></tr>
+    <tr><td>Computed (derived)</td><td>Compaction summaries, structured notes, digests of what's been done</td><td>One summarization call buys permanently cheaper turns after it</td><td>Summarizing without a preservation contract — the one constraint that mattered gets averaged away (§4.2)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — the 2M-token window doesn't repeal this module</div>
+<p>Every window-size jump (as of this writing, 2M-token production windows are arriving — see the Trends Board) re-raises the same proposal: "just load everything and skip the retrieval machinery." Reach for the big window when the task is genuinely <em>one-shot comprehension of a large static corpus</em> — analyze this codebase, review this contract set — where curation cost exceeds the one-time token bill and nothing needs to persist across sessions. Stay with curation for anything <em>iterative or long-running</em>: an agent loop re-sends its context every turn, so a stuffed window multiplies cost per turn, slows every inference, and marinates in its own context rot.</p>
+<p>The decision rule I use in reviews: multiply intended window fill by expected turns. A 1.5M-token context on a 3-turn analysis is a reasonable $10 of comprehension. The same context on a 60-turn agent is a four-figure bill for quality that Chroma's data says will be <em>worse</em> at turn 60 than a curated 40k context. Big windows are a capability; they are not an architecture.</p>
+</aside>
+
+<h2><span class="sec">§ 4.2</span> Compaction and context editing: surviving the long session</h2>
+<p>A long-running agent has exactly three options when the transcript approaches the budget: die (hit the cap mid-task), amputate (drop old turns wholesale and lose state), or <strong>compact</strong> — replace the bulk of the transcript with a dense summary and continue with the summary plus recent turns. Compaction is how harnesses like Claude Code survive multi-hour sessions, and as of early 2026 it's also a server-side API primitive, so you no longer have to hand-roll the summarize-and-reinitiate dance to get it.</p>
+<p>Two distinct mechanisms, often confused, that compose:</p>
+<ul>
+  <li><strong>Context editing (clearing)</strong> — surgically remove the <em>bodies</em> of old tool results (and optionally thinking blocks) while keeping the conversational skeleton. Cheap, lossy only where you choose, ideal for the "tool results dominate growth" problem in FIG 4.1. The model sees a placeholder where the 40k-token file dump used to be — and can re-fetch it if it genuinely needs it again.</li>
+  <li><strong>Compaction (summarize-and-continue)</strong> — replace the transcript wholesale with a model-written summary when a token threshold trips, then keep looping on top of the summary. Heavier, touches everything, and its quality depends entirely on what the summarization is instructed to preserve.</li>
+</ul>
+
+<figure class="fig">
+<svg viewBox="0 0 880 300" role="img" aria-label="Timeline of a 100-turn session: tool-result clearing fires repeatedly from 30k tokens keeping recent results, compaction fires at 150k replacing the transcript with a summary; the preservation contract lists what must survive: goal, decisions, constraints, artifact paths, open questions.">
+  <defs>
+    <marker id="c2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <line x1="40" y1="70" x2="850" y2="70" stroke="var(--ink)" stroke-width="1.5" marker-end="url(#c2)"/>
+  <text x="845" y="56" text-anchor="end" class="svg-label" font-size="9.5" fill="var(--muted)">turns → (tokens accumulate)</text>
+  <circle cx="120" cy="70" r="4" fill="var(--accent)"/><text x="120" y="94" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">turn 1</text>
+  <!-- clearing events -->
+  <g>
+    <rect x="240" y="110" width="230" height="64" rx="5" fill="none" stroke="var(--accent)" stroke-width="1.3"/>
+    <text x="355" y="130" text-anchor="middle" class="svg-label" font-size="9.5" font-weight="700" fill="var(--accent)">CONTEXT EDITING — fires repeatedly</text>
+    <text x="355" y="146" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">clear old tool-result bodies past a threshold,</text>
+    <text x="355" y="160" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">keep N most recent · model can re-fetch</text>
+    <line x1="300" y1="70" x2="300" y2="105" stroke="var(--accent)" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#c2)"/>
+    <line x1="380" y1="70" x2="380" y2="105" stroke="var(--accent)" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#c2)"/>
+    <line x1="450" y1="70" x2="450" y2="105" stroke="var(--accent)" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#c2)"/>
+  </g>
+  <!-- compaction event -->
+  <g>
+    <circle cx="620" cy="70" r="6" fill="var(--warn)"/>
+    <line x1="620" y1="76" x2="620" y2="105" stroke="var(--warn)" stroke-width="1.3" marker-end="url(#c2)"/>
+    <rect x="520" y="110" width="200" height="64" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/>
+    <text x="620" y="130" text-anchor="middle" class="svg-label" font-size="9.5" font-weight="700" fill="var(--warn)">COMPACTION — fires once (or rarely)</text>
+    <text x="620" y="146" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">transcript → dense summary,</text>
+    <text x="620" y="160" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">loop continues on summary + recent turns</text>
+  </g>
+  <circle cx="800" cy="70" r="4" fill="var(--accent)"/><text x="800" y="94" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">turn 100</text>
+  <!-- preservation contract -->
+  <rect x="40" y="205" width="810" height="80" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3" stroke-dasharray="4 3"/>
+  <text x="445" y="228" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--ink)">THE PRESERVATION CONTRACT — what any summary must carry forward, verbatim where possible</text>
+  <text x="445" y="248" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">the goal and its acceptance criteria · decisions made and their reasons · constraints discovered (“prod DB is read-only”)</text>
+  <text x="445" y="264" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--muted)">paths of artifacts written to disk · what's done vs. open · unresolved errors — everything else is compressible</text>
+</svg>
+<figcaption><b>FIG 4.2</b> — Editing fires often and cheaply on tool-result bodies; compaction fires rarely and rewrites everything. Both are only as safe as the preservation contract you write into them.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  T[Transcript grows] --> E{editing threshold?}
+  E -- yes --> C[Clear old tool-result bodies, keep recent N]
+  T --> K{compaction threshold?}
+  K -- yes --> S[Summarize under preservation contract] --> N[Continue: summary + recent turns]</pre>
+</details>
+</figure>
+
+<p>Both mechanisms in one call, using the Claude API's server-side context management (the TypeScript track shows the harness view — the Claude Agent SDK ships this behavior as defaults you tune rather than code you write):</p>
+
+<div class="code-tabs">
+  <div class="tab-row" role="tablist">
+    <button class="tab-btn active" role="tab">Python — server-side editing + compaction</button>
+    <button class="tab-btn" role="tab">TypeScript — Claude Agent SDK (harness view)</button>
+  </div>
+  <div class="tab-panel">
+<pre><code># pip install anthropic — betas as of 2026-07: verify current headers before shipping
+import anthropic
+
+client = anthropic.Anthropic()
+
+resp = client.beta.messages.create(
+    model="claude-sonnet-5",
+    max_tokens=4096,
+    betas=["context-management-2025-06-27", "compact-2026-01-12"],
+    tools=TOOLS,
+    messages=messages,
+    context_management={
+        "edits": [
+            {   # fires repeatedly: strip old tool-result bodies, keep the skeleton
+                "type": "clear_tool_uses_20250919",
+                "trigger": {"type": "input_tokens", "value": 60_000},
+                "keep": {"type": "tool_uses", "value": 5},
+                "clear_at_least": {"type": "input_tokens", "value": 15_000},
+                "exclude_tools": ["memory"],   # never clear the memory tool's results
+            },
+            {   # fires rarely: whole-transcript summary under an explicit contract
+                "type": "compact_20260112",
+                "trigger": {"type": "input_tokens", "value": 150_000},
+                "instructions": (
+                    "Summarize this session for an agent that will continue it. "
+                    "Preserve verbatim: the goal and acceptance criteria; every "
+                    "decision and why; every discovered constraint; paths of all "
+                    "artifacts written; what is done vs. open; unresolved errors. "
+                    "Compress everything else aggressively."
+                ),
+            },
+        ]
+    },
+)
+
+# observability: log what the server actually did to your context
+applied = getattr(resp, "context_management", None)
+if applied:
+    print("edits applied:", applied)   # cleared_tool_uses, cleared_input_tokens, ...</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code>// npm install @anthropic-ai/claude-agent-sdk
+// The harness already runs FIG 4.2: it auto-compacts as the window fills and
+// persists session state. You tune thresholds and write files; you don't
+// re-implement the mechanism.
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+for await (const message of query({
+  prompt: "Migrate the schema across services; keep NOTES.md updated as you go.",
+  options: {
+    maxTurns: 100,
+    // The durable-state pattern: anything that must survive compaction gets
+    // written to disk (NOTES.md, plan files) — the filesystem is the agent's
+    // external memory, re-readable after any summary. §4.3 formalizes this.
+    allowedTools: ["Read", "Write", "Grep", "Bash"],
+  },
+})) {
+  if (message.type === "result") console.log(message.result);
+}</code></pre>
+  </div>
+</div>
+
+<p>The single most important line in the Python example is the <code>instructions</code> string. A default summary optimizes for "reads like a good summary." Your agent needs it to optimize for <em>resumability</em> — which is why the preservation contract names categories (decisions, constraints, artifact paths, open items) instead of trusting the summarizer's taste. The second most important line is <code>exclude_tools: ["memory"]</code>: §4.3's memory tool is only useful if editing doesn't eat its outputs. And the cheapest insurance of all sits outside the API: <strong>write durable state to disk before it's at risk</strong>. An agent that keeps a <code>NOTES.md</code> and a plan file loses almost nothing to compaction, because the summary only has to remember that the files exist, not their contents.</p>
+
+<div class="failure">
+<div class="hd">Failure modes — editing &amp; compaction</div>
+<ol>
+  <li><strong>Compaction amnesia.</strong> The one constraint that mattered ("staging uses schema v2, prod is still v1") gets averaged into "worked on schema versions." Symptom in the trace: immediately after a <code>compaction</code> block, the agent re-asks or re-derives something it demonstrably knew, or violates a constraint it had been respecting for 40 turns. Mitigation: preservation-contract instructions + durable notes on disk + an eval that runs tasks <em>across</em> a forced compaction boundary (Lab, step 4).</li>
+  <li><strong>Summarizing the poison.</strong> Compaction laminates errors: a hallucinated "fact" in the transcript gets restated in the summary, now stripped of the shaky phrasing that might have let the model doubt it. Symptom: a wrong claim that appears with hedges early in a session reappears post-compaction as flat assertion. Mitigation: ground summaries in verifiable artifacts (file paths, IDs the runtime can check) and keep provenance — "per tool result X" — in the contract.</li>
+  <li><strong>Clearing what the model still needed.</strong> Aggressive <code>clear_tool_uses</code> drops a file body the model was mid-way through editing; it re-fetches (paying the turn back) or, worse, edits from memory of the file. Symptom: re-reads of recently cleared items, or diffs that don't match the file on disk. Mitigation: raise <code>keep</code>, tune the trigger to fire well before pressure is critical, and exclude tools whose outputs are session-critical.</li>
+  <li><strong>Cache-invalidation surprise.</strong> Editing mutates the prefix, so prompt-cache hits drop and per-turn cost can <em>rise</em> right after an edit fires even though the context shrank. Symptom: cost-per-turn sawtooth aligned with <code>applied_edits</code> events. Mitigation: fire edits in larger, rarer batches (<code>clear_at_least</code>) instead of tiny frequent trims; watch cache-hit rate next to token counts on the same dashboard (Module 11).</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — clear first, compact late</div>
+<p>Reach for tool-result clearing as your first and default lever: it targets the segment that actually grows (FIG 4.1), it's reversible in the only sense that matters (the model can re-fetch), and its blast radius is one stale payload. Reach for compaction only when the <em>conversational</em> history itself is the pressure — sessions long enough that even a skeleton transcript is heavy — and treat every compaction event as a small operational incident: log it, count it, eval across it.</p>
+<p>If your agent compacts more than once or twice per task, that's not a tuning problem — the task is decomposing wrong. Split it into sessions with explicit artifact handoffs (Module 03 §3.3's brief/finding discipline applies within a single agent's lifetime too), or move state out of the transcript into memory (§4.3). Compaction is a pressure-relief valve, not a lifestyle.</p>
+</aside>
+
+<h2><span class="sec">§ 4.3</span> Memory tiers: moving knowledge out of the window</h2>
+<p>Everything in §4.2 buys headroom <em>inside</em> one session. Memory is the complementary move: put durable knowledge <em>outside</em> the window, in stores the agent reads and writes through tools, so it survives compaction, session restarts, and process crashes. The taxonomy that's become standard sorts memory by what it remembers, and it matters because each tier wants a different store, a different retrieval trigger, and a different forgetting policy:</p>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Tier</th><th>Remembers</th><th>Lives in</th><th>Enters context</th><th>Forgetting policy</th></tr></thead>
+  <tbody>
+    <tr><td>Working</td><td>The current task: plan, recent turns, scratch state</td><td>The window itself + scratch files</td><td>Always (it <em>is</em> the context)</td><td>Compaction / session end</td></tr>
+    <tr><td>Episodic</td><td>What happened: past sessions, outcomes, transcripts</td><td>JSONL transcripts, session table</td><td>Retrieved when a similar task recurs ("have I done this before?")</td><td>TTL by age; keep outcomes, drop play-by-play</td></tr>
+    <tr><td>Semantic</td><td>Facts and preferences: "prefers staging deploys," "the API rate limit is 50/s"</td><td>Key-value / vector store (Postgres + pgvector below)</td><td>Small core pinned in-context; the rest retrieved by similarity</td><td>Supersede-on-conflict + last-accessed decay</td></tr>
+    <tr><td>Procedural</td><td>How to behave: learned rules, corrections, "always run the linter before committing"</td><td>Instruction files (<code>NOTES.md</code>, <code>CLAUDE.md</code>-style) the agent edits</td><td>In-context, folded into the system layer (Module 02 §2.3)</td><td>Human-reviewed edits; version-controlled</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The mechanism connecting the tiers to the loop is deliberately boring: <strong>memory is just tools</strong>. The Claude API's memory tool (<code>memory_20250818</code>) is the cleanest reference shape — the model gets <code>view / create / str_replace / insert / delete / rename</code> commands against a <code>/memories</code> directory, and <em>your code</em> implements the backend, which is exactly the point: the same tool surface can sit on tmpfiles for a prototype and Postgres for production. Anthropic's published numbers for the combination — context editing plus memory tool — are a 39% improvement over baseline on their agentic eval, and an 84% token reduction on a 100-turn task that otherwise exhausts the window (as-of figures; re-verify before quoting in a design doc). The framework ecosystem (LangMem, Mem0, Letta, Zep) packages these tiers with managed extraction and retrieval; the judgment call below is whether you need them.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 400" role="img" aria-label="Full-stack memory architecture: the agent runtime's loop uses a memory tool whose handler reads and writes a Postgres store with episodic, semantic and procedural tiers; compaction summaries feed back into working context; a budget report flows from the runtime through a FastAPI endpoint to a UI gauge.">
+  <defs>
+    <marker id="c3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="26" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="36" width="500" height="160" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="45" y="66" width="150" height="50" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+  <text x="120" y="87" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">The loop (M00)</text>
+  <text x="120" y="102" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">+ context_management (§4.2)</text>
+  <rect x="255" y="66" width="130" height="50" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+  <text x="320" y="87" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">memory tool</text>
+  <text x="320" y="102" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">view · create · str_replace</text>
+  <rect x="45" y="140" width="340" height="38" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="215" y="163" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--warn)">BudgetReport emitted per turn — tokens by segment (FIG 4.1)</text>
+  <line x1="195" y1="91" x2="250" y2="91" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#c3)"/>
+  <text x="20" y="240" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA</text>
+  <rect x="20" y="250" width="500" height="130" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="45" y="272" width="200" height="88" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/>
+  <text x="145" y="292" text-anchor="middle" class="svg-label" font-size="10" font-weight="700" fill="var(--ink)">Postgres + pgvector</text>
+  <text x="145" y="310" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">memories(scope, key, content,</text>
+  <text x="145" y="324" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">embedding, expires_at, last_accessed)</text>
+  <text x="145" y="344" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">episodic · semantic · procedural</text>
+  <rect x="290" y="272" width="200" height="88" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="390" y="296" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">forgetting job (cron)</text>
+  <text x="390" y="314" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">delete expired · decay unaccessed</text>
+  <text x="390" y="328" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">supersede conflicting facts</text>
+  <path d="M320 116 C 320 180, 200 220, 160 267" fill="none" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#c3)"/>
+  <text x="330" y="205" class="svg-label" font-size="9" fill="var(--muted)">handler reads/writes</text>
+  <text x="560" y="26" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API + FRONTEND</text>
+  <rect x="560" y="36" width="310" height="344" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="585" y="80" width="260" height="56" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/>
+  <text x="715" y="102" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">GET /sessions/:id/budget</text>
+  <text x="715" y="118" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">SSE — one BudgetReport per turn</text>
+  <rect x="585" y="190" width="260" height="56" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+  <text x="715" y="212" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">&lt;BudgetGauge/&gt;</text>
+  <text x="715" y="228" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">stacked bar + edit/compaction events</text>
+  <line x1="715" y1="136" x2="715" y2="185" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#c3)"/>
+  <path d="M385 159 C 480 159, 520 108, 580 108" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#c3)"/>
+  <text x="715" y="300" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">same BudgetReport object crosses</text>
+  <text x="715" y="314" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">runtime → SSE → gauge — the operator</text>
+  <text x="715" y="328" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">sees pressure before quality slides</text>
+</svg>
+<figcaption><b>FIG 4.3</b> — Memory and observability across the stack. The memory tool's handler is the seam: same tool surface, swappable backend. The BudgetReport the runtime emits is the object the API streams and the gauge renders.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  L[Agent loop + context_management] -- memory tool --> H[Handler]
+  H --> P[(Postgres + pgvector<br/>episodic/semantic/procedural)]
+  F[Forgetting job] --> P
+  L -- BudgetReport/turn --> A[GET /sessions/:id/budget SSE] --> G[BudgetGauge UI]</pre>
+</details>
+</figure>
+
+<h3>Layer 1 — agent runtime: the memory-tool handler and the instrumented loop (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — memory handler + budget-instrumented loop</button></div>
+  <div class="tab-panel">
+<pre><code># pip install anthropic psycopg[binary]
+from dataclasses import dataclass, asdict
+from pathlib import Path
+import anthropic, json
+
+MEMORY_TOOL = {"type": "memory_20250818", "name": "memory"}
+
+class FileMemoryBackend:
+    """Prototype backend: /memories on disk. Same interface as the
+    Postgres backend in Layer 2 — swap without touching the loop."""
+    def __init__(self, root: str = "./memories"):
+        self.root = Path(root); self.root.mkdir(exist_ok=True)
+
+    def handle(self, cmd: dict) -> str:
+        p = lambda rel: (self.root / rel.removeprefix("/memories").lstrip("/"))
+        try:
+            match cmd["command"]:
+                case "view":
+                    t = p(cmd.get("path", "/memories"))
+                    return t.read_text() if t.is_file() else "\n".join(
+                        sorted(x.name for x in t.iterdir())) or "(empty)"
+                case "create":
+                    p(cmd["path"]).write_text(cmd["file_text"]); return "ok"
+                case "str_replace":
+                    f = p(cmd["path"]); body = f.read_text()
+                    if body.count(cmd["old_str"]) != 1:
+                        return "ERROR: old_str must match exactly once"
+                    f.write_text(body.replace(cmd["old_str"], cmd["new_str"])); return "ok"
+                case "delete":
+                    p(cmd["path"]).unlink(); return "ok"
+                case _:
+                    return f"ERROR: unsupported command {cmd['command']!r}"
+        except OSError as e:
+            return f"ERROR: {e}"          # observations, not exceptions (M00 rule)
+
+@dataclass
+class BudgetReport:                        # the object that crosses every layer
+    turn: int; input_tokens: int; output_tokens: int
+    cache_read_tokens: int; edits_applied: int
+
+def run_session(task: str, memory: FileMemoryBackend, on_budget) -> str:
+    client = anthropic.Anthropic()
+    messages = [{"role": "user", "content": task}]
+    for turn in range(100):                # the Lab's 100-turn bar
+        resp = client.beta.messages.create(
+            model="claude-sonnet-5", max_tokens=4096,
+            betas=["context-management-2025-06-27", "compact-2026-01-12"],
+            tools=[MEMORY_TOOL, *TOOLS],
+            messages=messages,
+            context_management=CONTEXT_EDITS,        # the §4.2 config
+        )
+        applied = getattr(resp, "context_management", None)
+        on_budget(BudgetReport(
+            turn=turn,
+            input_tokens=resp.usage.input_tokens,
+            output_tokens=resp.usage.output_tokens,
+            cache_read_tokens=getattr(resp.usage, "cache_read_input_tokens", 0) or 0,
+            edits_applied=len(applied.applied_edits) if applied else 0,
+        ))
+        messages.append({"role": "assistant", "content": resp.content})
+        if resp.stop_reason != "tool_use":
+            return resp.content[-1].text
+        results = []
+        for block in resp.content:
+            if block.type != "tool_use": continue
+            out = (memory.handle(block.input) if block.name == "memory"
+                   else run_tool(block.name, block.input))
+            results.append({"type": "tool_result",
+                            "tool_use_id": block.id, "content": out})
+        messages.append({"role": "user", "content": results})
+    return "ERROR: turn cap reached"</code></pre>
+  </div>
+</div>
+
+<h3>Layer 2 — data/infra: the production backend and the forgetting policy (SQL + Python)</h3>
+<p>Memory that only grows is a liability — stale facts become §4.4's poison. The store therefore carries expiry and access metadata from day one, and a scheduled job enforces forgetting <em>deterministically</em>; forgetting is a policy decision, never something the model is trusted to remember to do.</p>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">SQL — schema + forgetting job</button><button class="tab-btn" role="tab">Python — Postgres backend (same interface)</button></div>
+  <div class="tab-panel">
+<pre><code>create extension if not exists vector;
+
+create table memories (
+  id            uuid primary key default gen_random_uuid(),
+  agent_id      text not null,
+  scope         text not null check (scope in ('episodic','semantic','procedural')),
+  path          text not null,            -- mirrors the memory tool's file paths
+  content       text not null,
+  embedding     vector(1024),             -- for similarity recall on semantic tier
+  supersedes    uuid references memories(id),
+  created_at    timestamptz not null default now(),
+  last_accessed timestamptz not null default now(),
+  expires_at    timestamptz,              -- null = pinned (procedural tier)
+  unique (agent_id, path)
+);
+create index on memories using hnsw (embedding vector_cosine_ops);
+
+-- the forgetting job (cron, e.g. nightly): deterministic, logged, boring
+delete from memories where expires_at < now();
+delete from memories
+ where scope = 'episodic'
+   and last_accessed < now() - interval '90 days';
+-- superseded semantic facts go last so conflicts resolve toward the newest
+delete from memories m
+ using memories newer
+ where newer.supersedes = m.id;</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code># Same interface as FileMemoryBackend — the loop cannot tell them apart.
+import psycopg
+
+class PgMemoryBackend:
+    def __init__(self, dsn: str, agent_id: str):
+        self.conn = psycopg.connect(dsn, autocommit=True)
+        self.agent = agent_id
+
+    def handle(self, cmd: dict) -> str:
+        try:
+            match cmd["command"]:
+                case "view":
+                    rows = self.conn.execute(
+                        "update memories set last_accessed = now() "
+                        "where agent_id = %s and path like %s "
+                        "returning path, content",
+                        (self.agent, cmd.get("path", "/memories") + "%"),
+                    ).fetchall()
+                    return "\n".join(f"== {p} ==\n{c}" for p, c in rows) or "(empty)"
+                case "create":
+                    self.conn.execute(
+                        "insert into memories (agent_id, scope, path, content, expires_at) "
+                        "values (%s, %s, %s, %s, now() + interval '90 days') "
+                        "on conflict (agent_id, path) do update "
+                        "  set content = excluded.content, last_accessed = now()",
+                        (self.agent, self._scope(cmd["path"]), cmd["path"], cmd["file_text"]),
+                    )
+                    return "ok"
+                case _:
+                    return "ERROR: unsupported command"
+        except psycopg.Error as e:
+            return f"ERROR: {e}"
+
+    def _scope(self, path: str) -> str:   # convention: /memories/<scope>/...
+        for s in ("episodic", "semantic", "procedural"):
+            if f"/{s}/" in path: return s
+        return "semantic"</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — API/transport: streaming the BudgetReport (Python, FastAPI)</h3>
+<p>The <code>on_budget</code> callback from Layer 1 lands here. The rendering side is Module 01 §1.2's <code>EventSource</code> pattern verbatim — same subscription shape, a stacked bar instead of a checklist — so it isn't repeated; the acceptance test is that <code>curl -N</code> shows the pressure live.</p>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — FastAPI + sse-starlette</button></div>
+  <div class="tab-panel">
+<pre><code># pip install fastapi uvicorn sse-starlette
+from fastapi import FastAPI
+from sse_starlette.sse import EventSourceResponse
+import asyncio, json
+from dataclasses import asdict
+
+app = FastAPI()
+queues: dict[str, asyncio.Queue] = {}
+
+def on_budget_factory(session_id: str):
+    q = queues.setdefault(session_id, asyncio.Queue())
+    loop = asyncio.get_event_loop()
+    def on_budget(report):                     # called from the agent thread, per turn
+        loop.call_soon_threadsafe(q.put_nowait, asdict(report))
+    return on_budget
+
+@app.get("/sessions/{session_id}/budget")
+async def budget_stream(session_id: str):
+    q = queues.setdefault(session_id, asyncio.Queue())
+    async def stream():
+        while True:
+            report = await q.get()
+            yield {"event": "budget", "data": json.dumps(report)}
+    return EventSourceResponse(stream())
+
+# curl -N http://localhost:8000/sessions/lab04/budget
+# → event: budget
+#   data: {"turn": 41, "input_tokens": 58210, ..., "edits_applied": 1}</code></pre>
+  </div>
+</div>
+
+<div class="failure">
+<div class="hd">Failure modes — memory</div>
+<ol>
+  <li><strong>Stale-memory poisoning.</strong> A fact that was true in March ("the rate limit is 50/s") steers a July session into repeated tool failures. Symptom: the agent confidently acts on a value no current tool result supports, and the memory store shows <code>last_accessed</code> updating while <code>created_at</code> is ancient. Mitigation: TTLs by tier, supersede-on-conflict writes, and provenance in the record so the agent can weigh age.</li>
+  <li><strong>Memory hoarding.</strong> The agent writes everything "to be safe"; recall then returns twenty near-duplicate notes and the useful one drowns — you've rebuilt context rot one query away. Symptom: memory reads whose results exceed the tool-result budget they were meant to save. Mitigation: write-time discipline in the tool description (what <em>not</em> to store), dedup on write, and the forgetting job.</li>
+  <li><strong>Retrieval mismatch.</strong> The fact is in the store but similarity search doesn't surface it at the moment of need — embeddings match topics, not tasks. Symptom in evals: memory-hit rate high on paraphrase probes, low on real task replays. Mitigation: retrieve by structure first (path/scope conventions, exact keys), similarity second; evaluate recall on replayed sessions, not synthetic queries (Module 11).</li>
+  <li><strong>Procedural drift.</strong> The agent edits its own instructions (procedural tier) into something subtly worse — an over-general rule learned from one bad episode. Symptom: behavior change with no deploy; the instruction file's diff history shows the moment. Mitigation: procedural memory goes through review — version control and a human gate, exactly like any other config that steers production behavior.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — memory framework, or files and a table?</div>
+<p>Reach for a memory framework (LangMem, Mem0, Letta, Zep) when memory <em>is</em> a product feature with hard requirements — cross-session personalization at scale, temporal knowledge graphs, managed extraction pipelines you'd otherwise staff — and benchmark it on your own latency budget first: published numbers differ wildly (as of this writing, one popular option's p95 recall latency is measured in tens of seconds, which disqualifies it from interactive paths regardless of accuracy). Stay with the boring stack — instruction files in git, a <code>memories</code> table like Layer 2, transcripts in JSONL — when memory is an <em>agent implementation detail</em>: it's inspectable with <code>psql</code> and <code>cat</code>, its forgetting policy is a cron job you wrote, and there's no second vector database to operate.</p>
+<p>The tell: if you can't state which tier (episodic/semantic/procedural) a proposed memory feature serves and what its forgetting policy is, you don't need a framework yet — you need this module's table. Frameworks package the tiers; they can't decide them for you.</p>
+</aside>
+
+<h2><span class="sec">§ 4.4</span> The pathology of degraded sessions</h2>
+<p>When a long session goes wrong, "the model got confused" is not a diagnosis. The failure taxonomy popularized by Drew Breunig gives you four named diseases, each with a distinct trace signature and a distinct cure — plus a fifth, older one. Learn to tell them apart the way you tell apart a memory leak from a connection-pool leak: the fix for one makes the other worse.</p>
+
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Pathology</th><th>What happens</th><th>Trace signature</th><th>First-line fix</th></tr></thead>
+  <tbody>
+    <tr><td>Poisoning</td><td>An error or hallucination enters context and gets built upon — repetition promotes it to established fact</td><td>A wrong claim recurs across turns, losing its hedges each time; post-compaction it's asserted flat (§4.2)</td><td>Quarantine: validate tool outputs at the boundary (M02's typed proposals), ground claims in checkable artifacts, re-verify before compaction</td></tr>
+    <tr><td>Distraction</td><td>Context grows so large the model leans on the accumulated history instead of reasoning — it repeats past actions rather than planning new ones</td><td>Action loops: near-duplicate tool calls late in session that early turns wouldn't have made; quality slides as tokens climb with no single bad input</td><td>Shrink: clearing + compaction (§4.2); for research-shaped work, partition across subagents — context isolation is M03 §3.1's whole reason to exist</td></tr>
+    <tr><td>Confusion</td><td>Irrelevant content — unused tools, off-task documents — degrades output; the model tries to honor everything it was given</td><td>Tool calls to tools that have nothing to do with the task; answers that drag in unrelated retrieved content</td><td>Curate: fewer tools per session (M02's action-space rule), retrieval thresholds, don't load "might need it" content (§4.1 table)</td></tr>
+    <tr><td>Clash</td><td>Contradictory information sits unresolved in one window — old plan vs. new instruction, stale memory vs. fresh tool result</td><td>The agent alternates between two behaviors across turns, or follows the superseded instruction after the correction</td><td>Supersede explicitly: remove/rewrite the stale half (context editing, memory supersedes), don't just append the correction and hope recency wins</td></tr>
+    <tr><td>Lost-in-the-middle</td><td>Content placed mid-window gets less attention than the edges — the classic long-context positional effect</td><td>Instructions honored when they're first/last in the prompt, missed when the same text sits at position 60k of 120k</td><td>Placement: critical constraints live at the top (system layer) or in the latest turn; long documents get summarized headers</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The diagnostic workflow when a session degrades: pull the transcript (you have one — Module 00's JSONL requirement was for this day), find the earliest turn where behavior went wrong, and read <em>backwards</em> asking "what in the window at that moment explains this?" Poisoning shows you the bad fact's first appearance. Distraction shows nothing wrong except size. Confusion shows the irrelevant block. Clash shows both contradicting pieces. This is exactly debugging from a heap dump, and it's why trace tooling (Module 11) treats the full per-turn context as the primary artifact, not just the final answer.</p>
+
+<h2><span class="sec">§ 4.5</span> Progressive disclosure: the default that makes the rest rare</h2>
+<p>Everything so far treats context pressure after it exists. The strongest move prevents it: <strong>give the agent the minimum to start, plus the means to get more</strong> — identifiers instead of payloads, indexes instead of documents, summaries with drill-down tools instead of full dumps. The agent that receives "there are 214 files; here's the tree; use <code>read_file</code>" stays sharp for 100 turns; the agent that receives 214 files inline is degraded by turn five, and no amount of §4.2 machinery fully claws that back.</p>
+<p>Progressive disclosure is already threaded through the manual — it's why Module 00 truncates tool outputs at the boundary, why Module 02 §2.3 injects dynamic context per-turn instead of front-loading, and why Module 03's orchestrator sends briefs rather than transcripts. Two forward pointers complete the picture: <em>skills</em> (Module 08) are progressive disclosure for knowledge — a one-line description in context, a full playbook loaded only when triggered — and <em>agentic search vs. pre-indexed retrieval</em> (Module 06) is the same budget decision applied to data-source integration. The unifying test for any context payload: <strong>would the agent fetch this itself if given a tool and a reason?</strong> If yes, ship the tool, not the payload.</p>
+
+<h2><span class="sec">§ 4.6</span> Lab — loopbot survives 100 turns</h2>
+<div class="block">
+<div class="hd">LAB 04 · Estimated 3–5 hours</div>
+<p><strong>Mission:</strong> take loopbot (Module 00, hardened in Module 02) and give it working memory, context editing, and compaction — then prove, with the budget gauge and an eval, that it survives a 100-turn session without quality collapse.</p>
+<p><strong>Spec:</strong></p>
+<ol>
+  <li>Wire in the memory tool with the file backend (§4.3 Layer 1); add the <code>context_management</code> config from §4.2 with thresholds low enough to actually fire in your session (clearing at ~30k, compaction at ~80k).</li>
+  <li>Emit a <code>BudgetReport</code> per turn and serve it over the §4.3 Layer 3 SSE endpoint. Store per-turn reports in a JSONL next to the transcript.</li>
+  <li>Build a 100-turn task: a question list over a repo, fed one at a time, where five late questions (turns 85–100) depend on facts established before turn 20 ("earlier you found the config default — what was it?").</li>
+  <li>Run three configurations against the same task: (a) baseline, no management — let it die or degrade; (b) editing + compaction, no memory; (c) editing + compaction + memory tool. Score the five late-recall questions in each.</li>
+  <li>Induce one pathology on purpose (§4.4): plant a contradictory "fact" mid-session and document, from the transcript, whether it poisons, clashes, or gets superseded.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+  <li>✅ <code>curl -N http://localhost:8000/sessions/lab04/budget</code> streams live <code>budget</code> events, and the plotted <code>input_tokens</code> curve visibly saw-tooths where edits fired — the pressure-relief is observable, not asserted.</li>
+  <li>✅ Configuration (a) either exhausts the window or scores ≤2/5 on late-recall; configuration (c) scores ≥4/5. Show the table.</li>
+  <li>✅ The memory directory after the run contains at least one semantic note that was <em>written before</em> compaction fired and <em>read after</em> it — cite the turn numbers from the transcript.</li>
+  <li>✅ A five-sentence writeup of the induced pathology naming which §4.4 signature it matched and which fix resolved it.</li>
+</ul>
+<p><strong>Stretch:</strong> swap <code>FileMemoryBackend</code> for the Postgres backend (Layer 2) without changing the loop, run the forgetting job mid-experiment, and show the agent gracefully re-deriving an expired fact instead of failing.</p>
+</div>
+
+<h2><span class="sec">§ 4.7</span> Consultant's checklist</h2>
+<div class="block">
+<div class="hd">Questions to ask any team running long-lived agents</div>
+<ul>
+  <li>Can they print the window's composition — system, tools, conversation, tool results, injected — for any turn of any session? Right now, or "we'd have to add logging"?</li>
+  <li>What fires when the context fills: a hard death, wholesale truncation, or managed editing/compaction? Who chose the thresholds, and against what eval?</li>
+  <li>What is the compaction preservation contract, verbatim? Does an eval run tasks <em>across</em> a compaction boundary, or is summary fidelity taken on faith?</li>
+  <li>For each memory the system keeps: which tier is it, where does it live, and what is its forgetting policy? "It's in the vector DB" answers none of those three.</li>
+  <li>Is there any deterministic forgetting at all, or does memory only grow? Who reviewed the procedural tier's last self-edit?</li>
+  <li>When a long session degraded last quarter, did anyone name the pathology (poisoning / distraction / confusion / clash) from the trace — or was the fix "restart it"?</li>
+  <li>What's the largest single tool result that can enter context today, in tokens? Is that a number or a shrug?</li>
+</ul>
+</div>
+
+<h2><span class="sec">§ 4.8</span> Design-review questions (staff+)</h2>
+<div class="block">
+<div class="hd">Interview / design-review bank</div>
+<ol>
+  <li><strong>Your agent's answer quality drops sharply after ~45 minutes of session time, with no errors logged. Walk me through the diagnosis.</strong> <em>Strong answers reach for the transcript and per-turn token counts first, distinguish the §4.4 pathologies by trace signature (poisoning has a first-bad-fact; distraction correlates only with size; clash has two contradicting entries), and check whether a compaction event precedes the cliff.</em></li>
+  <li><strong>A teammate proposes loading your entire 800k-token monorepo context into the new 2M window "so the agent stops missing things." Argue it.</strong> <em>Strong answers concede the one-shot comprehension case, then price the iterative case (tokens × turns), cite degradation-before-the-limit, and counter-propose tree + grep/read tools — progressive disclosure — with an eval to settle it.</em></li>
+  <li><strong>Design the compaction instructions for a customer-support agent that handles multi-hour escalations.</strong> <em>Strong answers write a preservation contract with categories (customer identifiers, commitments made to the customer, steps already tried, open ticket state), demand verbatim preservation of promises, and add a post-compaction eval probing exactly those categories.</em></li>
+  <li><strong>When does memory belong in the system prompt versus a store behind a tool?</strong> <em>Strong answers use size × stability: small and always-relevant (identity, top preferences, procedural rules) is pinned in-context where it's cacheable; large or conditionally relevant is behind retrieval; and anything the model itself should update flows through the tool so writes are observable and gated.</em></li>
+  <li><strong>Argue both sides: "context editing should be invisible to the model — never tell it things were removed."</strong> <em>Strong answers note that placeholders the model can see let it re-fetch deliberately (transparency aids planning), while invisible edits preserve conversational flow but risk the model referencing content that no longer exists; land on visible-but-cheap markers plus <code>exclude_tools</code> for anything it must never lose.</em></li>
+</ol>
+</div>
+
+<h2><span class="sec">§ 4.9</span> Go deeper</h2>
+<ul>
+  <li><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Anthropic — Effective Context Engineering for AI Agents</a> (the attention-budget framing, compaction, and structured note-taking this module builds on)</li>
+  <li><a href="https://www.dbreunig.com/2025/06/22/how-contexts-fail-and-how-to-fix-them.html">Drew Breunig — How Long Contexts Fail</a> (the poisoning/distraction/confusion/clash taxonomy in §4.4)</li>
+  <li><a href="https://platform.claude.com/docs/en/build-with-claude/context-editing">Claude docs — Context editing</a> and <a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool">Memory tool</a> (the API surfaces in §4.2–4.3; verify beta headers here)</li>
+  <li><a href="https://research.trychroma.com/context-rot">Chroma — Context Rot: How Increasing Input Tokens Impacts LLM Performance</a> (the degradation-before-the-limit evidence behind §4.1)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-12 · Volatile surfaces: beta header strings (<code>compact-2026-01-12</code>, <code>context-management-2025-06-27</code>), the memory tool version (<code>memory_20250818</code>), vendor window sizes, and the memory-framework landscape (LangMem/Mem0/Letta/Zep latency and accuracy numbers) all move fast — verify against current docs. The budget framing, the tier taxonomy, and the §4.4 pathology signatures are stable.</p>
+
+<nav class="pager">
+  <a href="module-03.html">← MODULE 03 — MULTI-AGENT ARCHITECTURES</a>
+  <span class="disabled">NEXT: MODULE 05 — FRAMEWORKS: THE HONEST COMPARISON (QUEUED)</span>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
