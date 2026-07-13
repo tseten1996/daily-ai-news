@@ -354,6 +354,146 @@
      ====================================================================== -->
 <main id="articles">
 
+<article class="topic" id="mcp-2026-07-28-rc"
+  data-title="MCP's Biggest Rewrite Yet: the 2026-07-28 Release Candidate Drops Sessions Entirely"
+  data-date="2026-07-13" data-tag="Protocols" data-emoji="🔌" data-hue="190"
+  data-blurb="No more Mcp-Session-Id, no more initialize handshake — the Model Context Protocol goes fully stateless so servers can run behind a plain load balancer. Ten-week migration window, final spec July 28.">
+<p class="stamp">date added: 2026-07-13</p>
+
+<h4>What it is</h4>
+<p>The Model Context Protocol team published the <strong>2026-07-28 release candidate</strong> — by its own description the largest revision since MCP launched roughly 20 months ago. The headline change: the <code>initialize</code>/<code>initialized</code> handshake and the <code>Mcp-Session-Id</code> header are both gone. Client info and capabilities now travel in <code>_meta</code> on every request instead of being pinned once at connection time, which means a server no longer needs sticky sessions, a shared session store, or session-aware load-balancer config — any instance can handle any request. The spec also formalizes an <strong>extensions framework</strong> (reverse-DNS IDs, negotiated via an <code>extensions</code> capability map, versioned independently of core) and ships two official extensions: <strong>MCP Apps</strong> (server-rendered UI in a sandboxed iframe) and <strong>Tasks</strong> (long-running work, demoted from a core feature to an extension). Authorization tightens its alignment with OAuth 2.0/OIDC (strict <code>iss</code> validation per RFC 9207, Dynamic Client Registration now requiring an <code>application_type</code>). Roots, Sampling, and Logging are deprecated under a new 12-month deprecation-to-removal lifecycle policy. The final spec ships July 28, 2026; the RC window is for SDK maintainers and client implementers to validate against real workloads.</p>
+
+<h4>Why it's trending</h4>
+<p>MCP is the plumbing underneath most of the agent stories already on this board — Meta's Muse Spark 1.1 claims zero-shot generalization to arbitrary MCP servers, and every "connect your agent to your tools" tutorial on this site assumes MCP works. Removing the session model directly answers the complaint that's dogged production MCP deployments all year: you couldn't put a stock round-robin load balancer in front of a remote MCP server without extra plumbing to keep a client pinned to the instance holding its session state. It's also a genuinely breaking change — anyone running a homegrown MCP server or client has a real migration to plan inside a ten-week window, which is why it's dominating both the MCP Discord and the usual protocol-watcher blogs this week.</p>
+
+<h4>Hands-on tutorial: find out what your own MCP server actually depends on</h4>
+<ol>
+  <li>Read the draft spec and changelog at <a href="https://modelcontextprotocol.io/specification/draft">modelcontextprotocol.io/specification/draft</a> — specifically the sections on session removal and the extensions capability map.</li>
+  <li>Install MCP Inspector, the protocol's official debugging UI, and point it at any MCP server you already run:
+<pre><code>npx @modelcontextprotocol/inspector node your-server.js</code></pre>
+  Watch the request/response log for the current <code>initialize</code> handshake and any <code>Mcp-Session-Id</code> header — that's exactly the surface the RC removes.</li>
+  <li>If you maintain a server, grep your own code for anywhere it keys in-memory state off the session ID (a per-connection cache, a pending-tool-call map, a rate limiter). For each one, sketch the RC's recommended fix: thread an explicit handle/ID as a tool argument instead of relying on hidden transport-level session state.</li>
+  <li>Check your SDK's release notes now — Python's <code>mcp</code> package and TypeScript's <code>@modelcontextprotocol/sdk</code> — for the Tier-1 SDK update the spec promises within the RC window; don't hand-roll the migration if the SDK is about to do it for you.</li>
+  <li><strong>Expected result:</strong> a short list of exactly which parts of your own MCP integration assume a sticky session, and a plan (even a one-line one) for each — done before the final spec lands on July 28, not after something breaks in production.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/">MCP Blog: the 2026-07-28 specification release candidate</a></li>
+  <li><a href="https://workos.com/blog/mcp-2026-spec-agent-authentication">WorkOS: the biggest MCP spec update ships July 28 — what changes for agent authentication</a></li>
+  <li><a href="https://aaif.io/blog/mcp-is-growing-up/">Agentic AI Foundation: MCP is growing up</a></li>
+  <li><a href="https://mcp.directory/blog/mcp-2026-07-28-release-candidate">MCP.Directory: the stateless release candidate, explained</a></li>
+</ul>
+</article>
+
+<article class="topic" id="friendly-fire-agentjacking"
+  data-title="Friendly Fire &amp; Agentjacking: When the Agent's Own Tools Feed It the Attack"
+  data-date="2026-07-13" data-tag="Security" data-emoji="🪤" data-hue="8"
+  data-blurb="A poisoned README and a spoofed Sentry error ticket hijacked Claude Code, Codex, and Cursor into running attacker code — no exploit, no auth bypass, just text the agent trusted. The trust-boundary checklist to run today.">
+<p class="stamp">date added: 2026-07-13</p>
+
+<h4>What it is</h4>
+<p>Two disclosures three weeks apart describe the same emerging attack shape from different angles. <strong>Agentjacking</strong> (disclosed mid-June by Tenet): attackers post a fake error event to a public, write-only Sentry DSN — a credential discoverable from browser JavaScript or a GitHub search — with attack instructions hidden in the event's message and context fields. The Sentry MCP server relays that event to a coding agent as ordinary diagnostic output; the agent, trusting it, follows the embedded instructions to run an npm package that exfiltrates AWS keys, GitHub tokens, and CI/CD secrets. Researchers report an 85% success rate against Claude Code, Cursor, and Codex in controlled tests, and found roughly 2,388 organizations with publicly exposed DSNs. <strong>Friendly Fire</strong> (published July 9 by the AI Now Institute): a plain <code>README.md</code> in an otherwise normal open-source repo instructs an agent doing a routine security review to run a "security.sh" helper, which quietly launches a binary disguised as the compiled output of an adjacent, innocent-looking Go file. The same unmodified payload worked against Claude Code (Sonnet 4.6, Sonnet 5, Opus 4.8) and OpenAI's Codex (GPT-5.5) when running in autonomous/auto-approve mode.</p>
+
+<h4>Why it's trending</h4>
+<p>Both attacks share a shape distinct from the Langflow RCE chain covered earlier on this board: there's no missing-auth exploit and no traditional vulnerability at all — the agent is doing exactly the job it was asked to do (review this code, triage this error) and gets hijacked by text it was designed to trust. That reframes the attack surface: it's now every piece of "trusted-looking" content an agent reads — a README, a bug tracker payload, a linter's output — not just the code it's told to modify. Both PoCs specifically required auto-approve/autonomous mode to succeed unattended, which puts a hard question in front of anyone who's enabled that mode on OpenCode, Claude Code, or a comparable agent for convenience.</p>
+
+<h4>Hands-on tutorial: audit your own agent's trust boundaries</h4>
+<ol>
+  <li>Check what mode your coding agent runs in day to day (Claude Code's permission settings, or your CLI's equivalent) and note any project where shell/bash commands are broadly auto-approved. Both PoCs required exactly this to run unattended — a human confirming a novel shell command would have caught the payload at the point of execution.</li>
+  <li>Clone the Friendly Fire proof-of-concept in an isolated VM or sandbox — not your normal dev machine — and read <code>README.md</code>, <code>security.sh</code>, and <code>code_policies.go</code> to see exactly how the injected instructions are worded:
+<pre><code>git clone https://github.com/Boyan-MILANOV/friendly-fire-ai-agent-exploit
+cd friendly-fire-ai-agent-exploit
+# read the three files above before running anything</code></pre>
+  This is the fastest way to build intuition for what a poisoned README actually looks like next to a legitimate one.</li>
+  <li>If you run the Sentry MCP server — or any MCP server that ingests third-party/untrusted data (bug trackers, support tickets, webhooks) — check whether its output ever reaches your agent unmarked as untrusted, and search your own repos and frontend JS for a publicly-discoverable DSN or webhook URL.</li>
+  <li>Write one policy and actually enforce it: agents may read untrusted external content for context, but any shell command or script that content recommends requires an explicit human approval step — no exception for "it looks like a normal script."</li>
+  <li><strong>Expected result:</strong> a concrete list of which of your repos/agents run in auto-approve mode today, and one settings change or written policy that closes the specific gap both disclosures exploited.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://thehackernews.com/2026/07/friendly-fire-ai-agents-built-to-catch.html">The Hacker News: "Friendly Fire" — AI agents built to catch malicious code can be tricked into running it</a></li>
+  <li><a href="https://ainowinstitute.org/publications/friendly-fire-exploit-brief">AI Now Institute: Friendly Fire exploit brief</a></li>
+  <li><a href="https://github.com/Boyan-MILANOV/friendly-fire-ai-agent-exploit">GitHub: Friendly Fire proof-of-concept</a></li>
+  <li><a href="https://thehackernews.com/2026/06/agentjacking-attack-tricks-ai-coding.html">The Hacker News: Agentjacking attack tricks AI coding agents into running malicious code</a></li>
+</ul>
+</article>
+
+<article class="topic" id="agent-evals-verification"
+  data-title="Verification, Not Generation, Is Now the Bottleneck — Build Your First Agent Eval"
+  data-date="2026-07-13" data-tag="Skills" data-emoji="🔍" data-hue="95"
+  data-blurb="OpenAI walked away from SWE-bench Verified after finding most of its hardest problems were unsolvable or contaminated — then found 30% of its replacement broken too. The lesson: build your own small eval, don't trust anyone's leaderboard.">
+<p class="stamp">date added: 2026-07-13</p>
+
+<h4>What it is</h4>
+<p>On February 23, 2026, OpenAI's Frontier Evals team announced it would stop reporting <strong>SWE-bench Verified</strong> scores. Its audit of the subset of problems its own models couldn't reliably solve found 59.4% had material issues — broken test design or ambiguous problem statements that were "extremely difficult or impossible" even for a capable human — and separately found evidence that frontier models including GPT-5.2, Claude Opus 4.5, and Gemini 3 Flash had been trained on benchmark solutions, meaning score gains increasingly reflected memorization rather than real capability gains. OpenAI recommended the industry move to <strong>SWE-bench Pro</strong> instead — then, months later, audited that benchmark too and found roughly 30% of its tasks were themselves broken, retracting their own recommendation. In parallel, Anthropic's engineering team published a practical guide, "Demystifying evals for AI agents," arguing that public leaderboards can't tell you whether an agent works on <em>your</em> codebase — only a small, task-specific eval suite (20–50 tasks drawn from your own real failures, graded with pass@1/pass@k rather than a single pass/fail number) can.</p>
+
+<h4>Why it's trending</h4>
+<p>It's the unglamorous flip side of every model-launch headline already on this board — Grok 4.5's 83.3% Terminal-Bench score, Fable 5's WebDev Arena Elo, Kimi K2.7's coding benchmarks. If the industry's own flagship benchmarks are contaminated or broken at the rates OpenAI itself disclosed, a vendor's leaderboard number was never going to tell you how a model performs on your repo. HN and engineering blogs this month have converged on framing this as a skill gap: "the best engineers in 2026 aren't the best coders, they're the best at not trusting AI code" — the bottleneck moved from generating a candidate change to proving it's actually correct, and Anthropic's own usage data shows engineers still fully auto-delegate only 0–20% of tasks even as AI touches most of their work, which is a trust gap, not a capability gap.</p>
+
+<h4>Hands-on tutorial: build a 10-task eval for your own agent setup this week</h4>
+<ol>
+  <li>Pull 10–20 real historical tasks from your own backlog or git log — actual bugs you fixed, actual small features you shipped — each with a clear, checkable "did it actually work" signal (tests pass, a specific behavior is observable, output has the right shape). Anthropic's guidance: draw tasks from real failures, not synthetic ones — effect sizes from early context/prompt changes are large enough that a small sample is plenty to start.</li>
+  <li>For each task, write the exact pass/fail check as a script, not a vibe:
+<pre><code># eval_task_03.sh — did the agent's fix actually pass this test?
+git apply agent_output.patch
+pytest tests/test_retry.py::test_flaky_backoff -q
+echo "exit code: $?"</code></pre>
+  If you can't write the check as code, the task isn't ready for your eval yet.</li>
+  <li>Run your current agent (Claude Code, OpenCode, Cursor — whichever you use daily) against all 10 tasks in a fresh session each time. Score <strong>pass@1</strong> (succeeded on the first attempt) separately from <strong>pass@3</strong> (succeeded within three tries) — the gap between the two numbers tells you whether failures are occasional bad luck or systematic.</li>
+  <li>Re-run the same 10 tasks whenever you're considering a change — a new model, a new <code>CLAUDE.md</code>/<code>AGENTS.md</code>, a new tool — and treat the eval score as the basis for adopting it, not intuition or a vendor benchmark.</li>
+  <li><strong>Expected result:</strong> a personal, versioned eval file that answers "did this change actually help" with a number — and, per OpenAI's own disclosure above, catches the same class of silent regression that made an industry-standard benchmark stop being trustworthy at scale.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://openai.com/index/why-we-no-longer-evaluate-swe-bench-verified/">OpenAI: why SWE-bench Verified no longer measures frontier coding capability</a></li>
+  <li><a href="https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents">Anthropic: demystifying evals for AI agents</a></li>
+  <li><a href="https://thenewstack.io/merge-gate-coding-agents/">The New Stack: 85% say code review is the new bottleneck</a></li>
+  <li><a href="https://www.thestack.technology/openai-wants-new-ai-benchmarks-to-replace-scales-broken-tests/">The Stack: OpenAI wants new benchmarks to replace "broken" SWE-bench Pro</a></li>
+</ul>
+</article>
+
+<article class="topic" id="seedream-50-pro"
+  data-title="Seedream 5.0 Pro: ByteDance's Reasoning Image Model for Infographics and Precision Editing"
+  data-date="2026-07-13" data-tag="Creative" data-emoji="🎨" data-hue="305"
+  data-blurb="Dense infographics in a single pass, region-precise editing that leaves the rest of the frame untouched, and native text in 10+ languages. Available today via API on fal.ai and Volcano Engine.">
+<p class="stamp">date added: 2026-07-13</p>
+
+<h4>What it is</h4>
+<p>ByteDance released <strong>Seedream 5.0 Pro</strong> on July 9 — a multimodal image model aimed squarely at professional production work rather than general creative generation. Its differentiators: <strong>complex information visualization</strong> (turning dense data and text into a logically structured infographic or diagram in one pass, aimed at educational and marketing content), <strong>interactive precision editing</strong> (point selection, sketch guidance, and region-specific edits that preserve everything outside the selected area, with layer separation and up to 10 reference images), <strong>native multilingual text rendering</strong> (accurate, correctly-directioned typography in 10+ languages including Chinese, English, Japanese, Korean, and Arabic), and photographic-grade lighting/material rendering tuned to produce strong keyframes for downstream video pipelines. It ships two API endpoints — text-to-image and a grounded edit model — and is live now via ByteDance's own Dreamina app plus third-party API platforms including <strong>fal.ai</strong> and Volcano Engine/BytePlus ModelArk.</p>
+
+<h4>Why it's trending</h4>
+<p>It's being framed as ByteDance's answer to GPT-Image 2, and the specific capability drawing attention is the infographic/dense-text case — most image models still mangle small text and structured layouts, and Seedream 5.0 Pro's single-pass handling of both is the part reviewers are actually testing rather than taking on faith. It also lands the same week as this board's other multimodal entries (Pocket TTS, Kling 3.0 Motion Control), reinforcing that region-precise, production-ready generation — not just prettier one-shot images — is where the creative-AI competition has moved.</p>
+
+<h4>Hands-on tutorial: generate an infographic and then edit one region of it</h4>
+<ol>
+  <li>Create a <a href="https://fal.ai">fal.ai</a> account and grab an API key (fal fronts Seedream 5.0 Pro as a straightforward hosted endpoint, no ByteDance account needed).</li>
+  <li>Install the JS client (a Python client is also available — check fal's docs page for the current package name and parameters, since API surfaces shift):
+<pre><code>npm install @fal-ai/client</code></pre></li>
+  <li>Generate a dense, text-heavy image — the case this model is actually built for, not a generic pretty picture:
+<pre><code>import { fal } from "@fal-ai/client";
+
+const result = await fal.subscribe("fal-ai/bytedance/seedream/v5/pro/text-to-image", {
+  input: {
+    prompt: "A clean infographic comparing three database replication strategies, with labeled diagrams and a short caption under each, in English"
+  }
+});
+console.log(result.data);</code></pre></li>
+  <li>Take the image you just generated and call the <strong>edit</strong> endpoint (<code>fal-ai/bytedance/seedream/v5/pro/edit</code>) with a prompt describing one specific region to change — e.g. "replace only the middle diagram's label text with 'Quorum Write'" — and confirm the other two diagrams are untouched.</li>
+  <li><strong>Expected result:</strong> a first image with correctly-rendered small text and a structured layout most general-purpose image models still botch, and a second image where only your targeted region changed. If text renders garbled, shorten the requested caption — dense multi-line text is the hardest case even for this model.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://fal.ai/models/bytedance/seedream/v5/pro/text-to-image">fal.ai: Seedream 5.0 Pro (Text-to-Image) API</a></li>
+  <li><a href="https://fal.ai/models/bytedance/seedream/v5/pro/edit">fal.ai: Seedream 5.0 Pro Edit (Image-to-Image) API</a></li>
+  <li><a href="https://www.testingcatalog.com/bytedance-debuts-seedream-5-0-pro-with-advanced-reasoning/">TestingCatalog: ByteDance debuts Seedream 5.0 Pro with advanced reasoning</a></li>
+  <li><a href="https://finance.biggo.com/news/9afcf6f0-fad1-403a-ad2f-174d86f863d2">BigGo: ByteDance unveils Seedream 5.0 Pro — 10+ languages, high-density infographics</a></li>
+</ul>
+</article>
+
 <article class="topic" id="grok-45-spacexai-cursor"
   data-title="Grok 4.5: SpaceXAI's First Model Since the $60B Cursor Deal"
   data-date="2026-07-11" data-tag="Coding" data-emoji="🛰️" data-hue="18"

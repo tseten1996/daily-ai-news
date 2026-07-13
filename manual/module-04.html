@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 04 — Context Engineering · Agentic Systems Field Manual</title>
+<!--
+  FRONT MATTER (for the ledger — see SCHEDULED_TASK_PROMPT.md / daily-run spec)
+  title: Context Engineering
+  slug: module-04-context-engineering
+  pillar: ARCHITECTURE ("Architectures: context budget, compaction, tiered memory, progressive disclosure")
+  difficulty: Practitioner
+  series: The Agentic Systems Field Manual (module 5 of 16 + 3 capstones)
+  tags: context-window, compaction, memory-tiers, context-rot, progressive-disclosure, lost-in-the-middle
+  meta description: Budgeting the context window across in-context, retrieved, and computed sources; compaction and Redis-backed tiered memory with TTLs for sessions that outlive one window; and how to diagnose poisoning, distraction, and context rot before they collapse a long-running agent.
+  read time: ~21 min (~5,000 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  /* Top bar */
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  /* Figures */
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  /* Code tabs */
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  /* Judgment call sidebar */
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  /* Failure modes */
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  /* Tables */
+  .tbl-wrap { overflow-x: auto; margin: 1.4rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; background: var(--panel); }
+  th {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    text-align: left; color: var(--muted);
+    border-bottom: 2px solid var(--ink);
+    padding: .55rem .7rem;
+  }
+  td { border-bottom: 1px solid var(--border); padding: .6rem .7rem; vertical-align: top; }
+  td:first-child { font-weight: 700; white-space: nowrap; }
+
+  /* Lab / checklist blocks */
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← Field Manual</a>
+  <span>AGENTIC SYSTEMS FIELD MANUAL · MODULE 04 / 15</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">FM-04 · Architecture</div>
+  <h1>Context Engineering</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Budgeting the window across in-context, retrieved, and computed sources; compaction and tiered external memory with TTLs for sessions that outlive any one window; and how to diagnose poisoning, distraction, and context rot before they collapse a long-running agent.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-13</b></span>
+    <span>DEPTH <b>~5,000 words</b></span>
+    <span>PREREQS <b>Module 02</b></span>
+    <span>LAB <b>give loopbot working memory + compaction; prove 100-turn survival</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§ 4.0</span> Orientation</h2>
+<p>An on-call remediation agent was six hours into a database failover incident when a human reviewer noticed something wrong: at turn 118 it proposed restarting <code>prod-web</code> — a service it had already restarted twice before, each time justifying the action with "a deploy is in progress; restart is safe once it completes." That justification was true at turn 4. It had been false since turn 40, when a human posted in the incident channel — ingested by the agent as an ordinary tool result — that the deploy was frozen pending a rollback review and <code>prod-web</code> must not be touched. The freeze notice was message 6 of what had, by turn 118, become an 830,000-token transcript: every <code>kubectl get pods</code>, every log grep, every Slack reply, all still resident because nothing had ever left. The constraint that should have overridden the model's guess was technically still "in context" — sitting in the middle of a haystack the model could no longer reliably search. It hadn't forgotten the freeze notice so much as lost the ability to retrieve it over the noise of everything that came after, and it filled the gap with the most recent plausible pattern instead: <em>restart the thing, that's what you do when a pod looks unhealthy.</em></p>
+<p>Module 00's turn caps would not have stopped this — the agent wasn't looping, it was steadily doing new, individually-reasonable-looking work. Module 02's typed proposal boundary <em>would</em> have stopped the actual restart at a policy gate, and that control is still necessary — nothing in this module replaces it. But this module is about the layer beneath both of those: what goes into the context window in the first place, what gets deliberately thrown away as a session runs long, and what gets moved somewhere a lookup can find reliably instead of leaving it to a 830K-token scan. Get this layer right and the freeze notice survives to turn 118 as a first-class, retrievable fact. Get it wrong and every other control in this manual spends its budget defending against a problem context engineering should have prevented upstream.</p>
+<p>Three disciplines, escalating in structure the way Module 02's did: budget what enters the window at all (§4.1), compact what's accumulated before it rots (§4.2), and route what must outlive any single window into tiered external memory (§4.3). §4.5 names the failure modes precisely enough to find them in a trace, and the lab proves the fix survives 100 turns — not a demo.</p>
+
+<h2><span class="sec">§ 4.1</span> The context window as a budget, not a container</h2>
+<p>Every token an agent sees on a given turn comes from exactly three sources, and conflating them is the root of most context-engineering mistakes. <strong>In-context</strong> is whatever's literally sitting in the messages array right now — the system prompt, the conversation so far, every tool result that's already been returned. <strong>Retrieved</strong> is anything fetched on demand, present only because something in the current turn asked for it — a RAG chunk, a memory-tool file read, a database row. <strong>Computed</strong> is a derived artifact that stands in for something larger — a summary, an extracted fact, a structured note — cheaper to hold than the source material and lossy by construction. A well-engineered agent treats all three as draws against one shared budget, not as three separate pools; the question for every piece of information is never "can it fit" but "does keeping it here, verbatim, earn its place over a pointer to it."</p>
+
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>Model family</th><th>Context window (API, mid-2026)</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>Claude (Sonnet 5 / Opus 4.8 / Fable 5)</td><td>1,000,000 tokens</td><td>Long-context surcharge removed March 2026 — standard pricing throughout the window</td></tr>
+<tr><td>Claude Haiku 4.5</td><td>200,000 tokens</td><td>Smaller-window tier; compaction matters sooner</td></tr>
+<tr><td>GPT-5.5</td><td>1,000,000 tokens (API) / 400,000 (Codex)</td><td>Ceiling varies by product surface, not just model</td></tr>
+<tr><td>Gemini 3 Pro / Flash</td><td>1,000,000–2,000,000 / 200,000</td><td>Pro's upper figure varies by surface (Vertex AI vs. AI Studio)</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Every one of those numbers will be stale within a quarter — treat the table as an illustration of order-of-magnitude, not a spec sheet, and verify against the vendor's current docs before citing a figure in a proposal (AS-OF note, §4.10). The number that matters more than any of them is qualitative: <strong>windows got bigger; the reason to manage them didn't go away, because the failure mode it prevents moved.</strong> In the 8K–32K era, the dominant failure was a hard error — the request simply didn't fit, and you found out immediately. At 200K–2M tokens, the dominant failure is soft: <a href="https://arxiv.org/abs/2307.03172">Liu et al.'s "Lost in the Middle"</a> found that retrieval accuracy over long contexts follows a U-shape — highest when the needed fact sits at the very start or the very end of the input, and measurably worse when it sits in the middle, even on models explicitly built for long contexts. Later replications sharpen this further: the U-shape mostly holds while the window is under roughly half full; past that point, the pattern shifts toward straightforward recency bias — the model increasingly favors whatever is closest to the end, regardless of where the important fact actually sits. Either way, the practical upshot is the same one the incident-response agent lived through: a fact doesn't have to be truncated to become unreachable. It just has to be far enough from the places the model's attention actually searches.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 300" role="img" aria-label="Three sources feed one context budget: in-context messages, retrieved chunks fetched on demand, and computed summaries standing in for larger source material. The merged window has a soft rot zone starting around half full, well before the hard token limit.">
+  <defs>
+    <marker id="c4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <rect x="20" y="20" width="190" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="115" y="40" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">IN-CONTEXT</text><text x="115" y="55" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">system prompt + history + tool results already returned</text>
+  <rect x="20" y="86" width="190" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="115" y="106" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">RETRIEVED</text><text x="115" y="121" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">RAG chunks, memory-tool reads, DB rows — fetched on demand</text>
+  <rect x="20" y="152" width="190" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="115" y="172" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">COMPUTED</text><text x="115" y="187" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">summaries, extracted facts — lossy stand-ins for the source</text>
+  <line x1="210" y1="43" x2="255" y2="100" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#c4a)"/>
+  <line x1="210" y1="109" x2="255" y2="109" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#c4a)"/>
+  <line x1="210" y1="175" x2="255" y2="118" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#c4a)"/>
+  <rect x="260" y="70" width="80" height="78" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"/><text x="300" y="105" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">ONE</text><text x="300" y="119" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">BUDGET</text>
+  <line x1="340" y1="109" x2="380" y2="109" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#c4a)"/>
+  <rect x="385" y="70" width="470" height="78" rx="6" fill="none" stroke="var(--ink)" stroke-width="1.6"/>
+  <rect x="385" y="70" width="235" height="78" fill="var(--accent-soft)" opacity=".55"/>
+  <rect x="620" y="70" width="235" height="78" fill="var(--warn)" opacity=".14"/>
+  <text x="503" y="60" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">0% full — U-shaped retrieval; start/end favored</text>
+  <text x="737" y="60" text-anchor="middle" class="svg-label" font-size="9" fill="var(--warn)">&gt;~50% full — recency-biased; middle facts fade fastest</text>
+  <line x1="620" y1="62" x2="620" y2="156" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="620" y="172" text-anchor="middle" class="svg-label" font-size="9" fill="var(--warn)" font-weight="700">soft-rot onset</text>
+  <text x="855" y="172" text-anchor="end" class="svg-label" font-size="9" fill="var(--muted)">hard limit →</text>
+</svg>
+<figcaption><b>FIG 4.1</b> — One budget, three sources. The hard limit is rarely the operative constraint anymore; retrieval quality degrades well before the window fills, which is why §4.2–§4.3 manage the window long before it's technically full.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  IC[In-context: prompt + history + tool results] --> B[One shared budget]
+  RT[Retrieved: fetched on demand] --> B
+  CP[Computed: summaries, extracted facts] --> B
+  B --> W[Context window]
+  W -. soft-rot onset near ~50% full .-> W</pre>
+</details>
+</figure>
+
+<p>The engineering consequence: default every piece of information to the cheapest tier that still does the job. Tool output the model only needed to confirm success can be truncated to a status line the moment it's read (computed). A document the agent might reference again belongs behind a retrieval call, not inlined in full (retrieved). Only facts the agent must have available on every subsequent turn, without a lookup, earn a permanent seat in-context — and even those should be as compact as the task allows. §4.2 and §4.3 are the two mechanisms that enforce this discipline once a session runs long enough that it stops being optional.</p>
+
+<h2><span class="sec">§ 4.2</span> Compaction: summarize and continue, before rot sets in</h2>
+<p>Compaction is the discipline of periodically converting the older part of a long-running conversation into a smaller, computed stand-in — a summary — while keeping the most recent turns verbatim and carrying forward a small set of facts that must survive untouched. It is not a last resort for when the window is about to overflow; per §4.1, the trigger for compaction should fire well before the hard limit, at the point where retrieval quality has started to erode, because that point arrives earlier than most teams assume.</p>
+<p>Anthropic ships two vendor-managed primitives for exactly this problem: <strong>context editing</strong> (beta <code>context-management-2025-06-27</code>), which clears old tool-use/tool-result pairs once a token threshold is crossed and replaces them with a placeholder so the model knows something was removed; and <strong>compaction</strong> (beta <code>compact-2026-01-12</code>), which summarizes the whole conversation server-side as it nears the window limit. Anthropic reports roughly 29% token savings from context editing alone and 39% from context editing plus the memory tool (§4.3) over an unmanaged baseline, and describes cutting token consumption by roughly 84% on a hundred-turn web-search task while letting the run complete instead of failing on context exhaustion. Treat those figures as vendor-reported and directional — verify current numbers before quoting them in a proposal (AS-OF, §4.10).</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 330" role="img" aria-label="Compaction pipeline: turns accumulate until a token threshold trips; a summarizer call condenses the older turns into a summary while pinned facts and the last K turns pass through unchanged, producing a smaller compacted context.">
+  <defs>
+    <marker id="c4b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="26" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">BEFORE COMPACTION — GROWING TRANSCRIPT</text>
+  <rect x="20" y="36" width="840" height="50" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="35" y="48" width="70" height="26" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.1"/><text x="70" y="65" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--ink)">turns 1-8</text>
+  <rect x="115" y="48" width="480" height="26" rx="4" fill="none" stroke="var(--ink)" stroke-width="1.1" stroke-dasharray="3 3"/><text x="355" y="65" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">turns 9-92 — tool calls, logs, replies, all still resident</text>
+  <rect x="605" y="48" width="235" height="26" rx="4" fill="none" stroke="var(--ink)" stroke-width="1.1"/><text x="722" y="65" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--ink)">turns 93-100 (last K)</text>
+  <text x="850" y="86" text-anchor="end" class="svg-label" font-size="9" fill="var(--warn)" font-weight="700">≥ threshold — compact now</text>
+
+  <path d="M440 90 L440 120" fill="none" stroke="var(--warn)" stroke-width="1.4" marker-end="url(#c4b)"/>
+  <rect x="330" y="126" width="220" height="40" rx="6" fill="none" stroke="var(--warn)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="440" y="150" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--warn)">summarizer call — condenses turns 9-92</text>
+
+  <text x="20" y="212" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AFTER COMPACTION — SMALLER, STRUCTURED CONTEXT</text>
+  <rect x="20" y="222" width="840" height="90" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="35" y="240" width="200" height="56" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"/><text x="135" y="262" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">pinned_facts[]</text><text x="135" y="277" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">verbatim, schema-checked — bypasses the summarizer entirely</text>
+  <rect x="255" y="240" width="330" height="56" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="420" y="262" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">summary (prose, lossy)</text><text x="420" y="277" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">turns 9-92 condensed to a few hundred tokens</text>
+  <rect x="605" y="240" width="235" height="56" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="722" y="262" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">last K turns, verbatim</text><text x="722" y="277" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">no summarization risk on recent context</text>
+  <path d="M115 90 L135 236" fill="none" stroke="var(--accent)" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#c4b)"/>
+  <path d="M550 166 L420 236" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#c4b)"/>
+  <path d="M722 90 L722 236" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#c4b)"/>
+</svg>
+<figcaption><b>FIG 4.2</b> — Compaction's shape: pinned facts pass through untouched and schema-checked; only the middle stretch gets summarized; the tail stays verbatim. This is exactly the structure that keeps the §4.0 freeze notice alive to turn 118.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  T[Turns 1-100, growing] -->|threshold crossed| S[Summarizer call: turns 9-92]
+  T -->|pinned_facts, verbatim| P[Compacted context]
+  S -->|prose summary| P
+  T -->|last K turns, verbatim| P</pre>
+</details>
+</figure>
+
+<h3>Layer 1 — agent runtime: a typed compacted-context object (Python)</h3>
+<p>The pinned-facts list is the load-bearing part — it's exactly Module 01 §1.5's typed output boundary applied to compaction: the summary is prose and allowed to be lossy, but anything a downstream turn will treat as settled must be schema-validated, not trusted freehand.</p>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist">
+    <button class="tab-btn active" role="tab">Python — pydantic + anthropic</button>
+    <button class="tab-btn" role="tab">TypeScript — vendor compaction + context editing</button>
+    <button class="tab-btn" role="tab">Java — Spring AI custom ChatMemory</button>
+  </div>
+  <div class="tab-panel">
+<pre><code># pip install anthropic pydantic
+from pydantic import BaseModel, Field
+import anthropic
+
+client = anthropic.Anthropic()
+
+class PinnedFact(BaseModel):
+    key: str
+    value: str
+    established_turn: int
+    evidence_ref: str          # what tool result or message proved this — never a bare assertion
+
+class CompactedContext(BaseModel):
+    session_id: str
+    summary: str                       # lossy prose — never load-bearing on its own
+    pinned_facts: list[PinnedFact]      # must survive every compaction verbatim
+    last_k_turns: list[dict]
+    compacted_at_turn: int
+    tokens_before: int
+    tokens_after: int
+
+COMPACT_THRESHOLD_TOKENS = 60_000   # trip well below the model's window — rot, not overflow, is the target
+KEEP_LAST_TURNS = 8                  # recent turns need no summarization; keep them exact
+
+def estimate_tokens(messages: list[dict]) -> int:
+    return sum(len(str(m)) for m in messages) // 4   # swap for a real tokenizer/count endpoint in production
+
+def compact(session_id: str, messages: list[dict],
+            pinned: list[PinnedFact], turn: int) -> CompactedContext | None:
+    tokens_before = estimate_tokens(messages)
+    if tokens_before < COMPACT_THRESHOLD_TOKENS:
+        return None                     # not due yet — most turns take this path
+    head, tail = messages[:-KEEP_LAST_TURNS], messages[-KEEP_LAST_TURNS:]
+    pinned_block = "\n".join(f"- {p.key}: {p.value} (turn {p.established_turn})" for p in pinned)
+    resp = client.messages.create(
+        model="claude-sonnet-5", max_tokens=1024,
+        system=("Summarize this agent transcript for a fresh continuation. Preserve every "
+                 "constraint, decision, and open question. The pinned facts below are ALREADY "
+                 "guaranteed to survive — do not restate them, and do not contradict them."),
+        messages=[{"role": "user", "content": f"Pinned facts:\n{pinned_block}\n\nTranscript:\n{head}"}],
+    )
+    summary = resp.content[-1].text
+    return CompactedContext(
+        session_id=session_id, summary=summary, pinned_facts=pinned, last_k_turns=tail,
+        compacted_at_turn=turn, tokens_before=tokens_before,
+        tokens_after=estimate_tokens(tail) + len(summary) // 4,
+    )</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code>// npm install @anthropic-ai/sdk
+import Anthropic from "@anthropic-ai/sdk";
+const client = new Anthropic();
+
+// Server-side compaction + context editing: the vendor runs the summarizer and
+// the eviction policy; you configure thresholds and what to keep verbatim.
+// Same shape as the Python version, without owning the summarizer call yourself.
+const resp = await client.beta.messages.create({
+  model: "claude-sonnet-5",
+  max_tokens: 2048,
+  betas: ["compact-2026-01-12", "context-management-2025-06-27"],
+  context_management: {
+    edits: [{
+      type: "clear_tool_uses_20250919",
+      trigger: { type: "input_tokens", value: 60000 },   // same threshold logic as COMPACT_THRESHOLD_TOKENS
+      keep: { type: "tool_uses", value: 8 },              // keep the last 8 tool turns verbatim
+    }],
+  },
+  messages,
+});
+// Beta surface — header names and default thresholds are exactly the kind of
+// thing to re-verify against current docs before shipping (§4.10 AS-OF note).</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code>// Spring AI's built-in ChatMemory implementations are windowed by default:
+// MessageWindowChatMemory drops the oldest messages once a size cap is hit —
+// it does NOT summarize or pin anything. That's a materially different failure
+// profile from the Python/TypeScript versions above: windowing loses the
+// freeze notice permanently and silently, with no summary trace left behind.
+// A compacting memory needs its own implementation:
+@Component
+class CompactingChatMemory implements ChatMemory {
+    private static final int THRESHOLD_TOKENS = 60_000;
+    private final Map<String, List<Message>> store = new ConcurrentHashMap<>();
+    private final Compactor compactor;   // wraps a summarizer call + pinned-facts schema check
+
+    @Override
+    public void add(String conversationId, List<Message> messages) {
+        var existing = store.computeIfAbsent(conversationId, k -> new ArrayList<>());
+        if (estimateTokens(existing) > THRESHOLD_TOKENS) {
+            existing = compactor.summarizeAndPin(existing);   // same shape as compact() above
+        }
+        existing.addAll(messages);
+        store.put(conversationId, existing);
+    }
+}</code></pre>
+  </div>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — compact this agent, or isolate the next chunk of work?</div>
+<p>Reach for compaction when the task is one continuous identity that must remember what came before — a single incident, one customer conversation, one agent's ongoing shift. Reach for Module 03's context isolation (a fresh subagent, a clean handoff) when the next unit of work doesn't actually need the accumulated history at all — a genuinely independent subtask is cheaper to hand a typed brief than to compact 800K tokens down to fit.</p>
+<p>The tell: isolation forfeits continuity in exchange for a clean slate. If the honest answer to "does the next step need to remember turn 4's freeze notice" is yes, you cannot solve that with a fresh subagent unless you hand it that fact explicitly in the brief — which is compaction wearing a different hat, not an alternative to it. Isolation and compaction aren't competing solutions to the same problem; they answer different questions ("does this need to be one continuous session?" vs. "how do I keep one continuous session small?").</p>
+</aside>
+
+<h2><span class="sec">§ 4.3</span> Memory tiers: conversation, scratchpad, episodic, semantic, procedural</h2>
+<p>Compaction manages one session's window. Some facts need to outlive the session entirely — a customer's stated preference, a runbook learned from a past incident, a standing organizational policy. These belong in external memory, and treating "memory" as one undifferentiated bucket is how teams end up either re-deriving the same facts every session (nothing persisted) or drowning every session in irrelevant history (everything persisted, nothing scoped). Five tiers, ordered by how long a fact should live and how it should be looked up, cover almost every real case:</p>
+
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>Tier</th><th>Lifetime</th><th>Storage</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td>Conversation</td><td>The live session only</td><td>The messages array itself — never written to an external store</td><td>The last K raw turns after compaction (§4.2)</td></tr>
+<tr><td>Scratchpad</td><td>One task/session</td><td>External KV, short-medium TTL</td><td>"Step 3 of 7 done, waiting on the migration job"</td></tr>
+<tr><td>Episodic</td><td>Weeks to months</td><td>KV or document store, longer TTL, often similarity-indexed</td><td>"Last time this alert fired, restarting didn't help — clearing the connection pool did"</td></tr>
+<tr><td>Semantic</td><td>Long-lived, revalidated not clock-expired</td><td>KV/DB, versioned, long or no TTL</td><td>"prod-web deploys freeze every Friday after 3pm"</td></tr>
+<tr><td>Procedural</td><td>Curated, changes rarely</td><td>Files/skills — authored, not auto-expired</td><td>A runbook: the db-failover checklist</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>This maps closely onto <a href="https://arxiv.org/abs/2310.08560">Packer et al.'s MemGPT</a>, which frames an LLM's context the way an OS frames RAM: a small, fast working set (main context) backed by unlimited, slower archival storage, with explicit function calls paging facts between the two. Letta, MemGPT's production successor, collapses this into a three-tier core/archival/recall model that maps cleanly onto the five tiers above (core ≈ conversation + pinned facts, archival ≈ semantic + procedural, recall ≈ episodic). Anthropic's own <a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool">memory tool</a> is a production instance of the same idea at the API layer: a client-side <code>/memories</code> directory Claude reads and writes via <code>view</code>/<code>create</code>/<code>str_replace</code>/<code>insert</code>/<code>delete</code>/<code>rename</code> commands, with just-in-time retrieval as the default posture — Claude checks the directory listing before reading any file in full, rather than front-loading everything. Anthropic's stated pattern for long-running agents is to run both mechanisms together: compaction keeps the active window small without client-side bookkeeping, while memory preserves exactly the facts that must survive a compaction event untouched — which is precisely why §4.2's <code>pinned_facts</code> and this section's tiers are the same discipline applied at two different lifetimes.</p>
+
+<h3>Layer 2 — data/infra: a Redis-backed tiered store with TTLs (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — redis-py</button></div>
+  <div class="tab-panel">
+<pre><code># pip install redis
+import redis, json
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+TIER_TTL_SECONDS = {
+    # conversation lives only in-context — never written here, see §4.2/§4.3 table
+    "scratchpad": 60 * 60 * 4,            # 4h — dies with the session unless promoted
+    "episodic":   60 * 60 * 24 * 30,      # 30 days — one task's outcome, for similar-task recall
+    "semantic":   None,                    # long-lived; revalidated against source, not clock-expired
+    "procedural": None,                    # curated playbooks — no auto-expiry
+}
+
+def remember(session_id: str, tier: str, key: str, value: str) -> None:
+    redis_key = f"agent:{session_id}:{tier}:{key}"
+    r.set(redis_key, value)
+    ttl = TIER_TTL_SECONDS[tier]
+    if ttl:
+        r.expire(redis_key, ttl)
+
+def recall(session_id: str, tier: str, key: str) -> str | None:
+    return r.get(f"agent:{session_id}:{tier}:{key}")
+
+def recall_tier(session_id: str, tier: str) -> dict[str, str]:
+    keys = r.keys(f"agent:{session_id}:{tier}:*")
+    return {k.rsplit(":", 1)[-1]: r.get(k) for k in keys}
+
+# The freeze notice from §4.0, written the moment it's confirmed (evidence_ref
+# points at the Slack message tool result that proved it — see PinnedFact above):
+remember("incident-4471", "semantic", "deploy_freeze",
+         json.dumps({"value": "prod-web deploy frozen since turn 4 pending rollback "
+                                "approval — do not restart prod-web",
+                     "evidence_ref": "slack:C0123/p1720000000000"}))</code></pre>
+  </div>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — what earns a place in memory, and what's its TTL?</div>
+<p>Pin or store a fact only when it's both expensive/risky to reconstruct <em>and</em> its absence would cause an unsafe or costly decision — a deploy freeze, a customer's stated hard constraint, a runbook step learned the hard way. Everything else should fall out of context and be regenerated on demand; a memory system that hoards everything is context rot with extra infrastructure, plus its own staleness bugs.</p>
+<p>Set the TTL from the fact's real-world half-life, not from storage convenience. A deploy freeze doesn't expire on a clock — it expires when the freeze lifts, so it belongs in the semantic tier with a revalidation check against the live source before any high-stakes action, not a fixed TTL that might silently outlive or under-live the actual freeze window. Reserve clock-based TTLs (scratchpad, episodic) for facts whose relevance genuinely does decay with time regardless of any external event.</p>
+</aside>
+
+<h2><span class="sec">§ 4.4</span> Full-stack: the same context object across runtime, data, and API</h2>
+<p>The pattern from Module 01 §1.2 and Module 03 §3.4 generalizes here: whatever object the runtime produces should be the same object the API serves and a human (or <code>curl</code>) can inspect — not re-derived per layer. A thin FastAPI layer over the Redis store from §4.3 turns "what does this agent remember" from a debugging mystery into a one-line command, and gives the lab (§4.7) something observable that isn't just a log line.</p>
+
+<h3>Layer 3 — API/transport: exposing memory and pinned facts for inspection (Python, FastAPI)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — FastAPI</button></div>
+  <div class="tab-panel">
+<pre><code># pip install fastapi uvicorn   ·   run: uvicorn memory_api:app --port 8000
+from fastapi import FastAPI
+import json
+
+app = FastAPI()
+
+@app.get("/agents/{session_id}/memory")
+def get_memory(session_id: str):
+    return {tier: recall_tier(session_id, tier) for tier in TIER_TTL_SECONDS}
+
+@app.get("/agents/{session_id}/pinned")
+def get_pinned(session_id: str):
+    raw = recall(session_id, "semantic", "deploy_freeze")
+    return json.loads(raw) if raw else None</code></pre>
+  </div>
+</div>
+<pre class="plain">$ curl -s localhost:8000/agents/incident-4471/pinned | jq
+{
+  "value": "prod-web deploy frozen since turn 4 pending rollback approval — do not restart prod-web",
+  "evidence_ref": "slack:C0123/p1720000000000"
+}</pre>
+<p>That's the §4.0 incident, checked at turn 118 instead of discovered by a human at turn 118: the freeze notice is still there, still tied to the tool result that proved it, retrievable in one request instead of a scan across an 830K-token transcript. A live version of this — a status panel that polls the endpoint during a run — is the same SSE pattern Module 01 §1.2 already built; not repeated here.</p>
+
+<h2><span class="sec">§ 4.5</span> Diagnosing a degraded session: poisoning, distraction, and rot</h2>
+<div class="failure">
+<div class="hd">Failure modes — context engineering</div>
+<ol>
+<li><strong>Context poisoning.</strong> A hallucinated or injected claim gets stated once, and because it now reads as "the agent's own prior statement" in the transcript, later turns treat it as established fact and build on it — the error compounds instead of staying contained. Symptom: a fabricated detail (a file path, a metric, a customer name) appears once with no tool verification behind it, then gets cited as given in subsequent turns. Mitigation: never let compaction or a memory write promote a claim into <code>pinned_facts</code> or a semantic-tier entry without an <code>evidence_ref</code> pointing at the tool result that actually proved it — an assertion with no evidence is not eligible for permanence.</li>
+<li><strong>Distraction.</strong> A long run accumulates many instances of the same class of action (repeated restarts, repeated similar tool calls), and their sheer repetition in the transcript out-weighs a single, more important instruction from earlier — the model pattern-matches to "what usually happens next" rather than reasoning about the specific constraint that should override it. Symptom: the agent keeps repeating an action whose frequency in the transcript has grown, even after being told to stop, and the ratio of stated reasoning to repeated action collapses. Mitigation: compact repeated-action clusters into one aggregated note ("attempted N times, all failed the same way") rather than letting age alone drive what gets summarized — repetition, not just staleness, is a compaction trigger.</li>
+<li><strong>Compaction amnesia.</strong> The summarizer drops or under-weights a fact that wasn't flagged as pin-worthy at write time — the §4.0 failure exactly. Symptom: an established constraint stops being honored right after a compaction event; grepping the transcript shows the fact's first appearance and its last honored turn straddling a compaction boundary. Mitigation: make pinning an explicit, cheap action available every turn rather than something inferred after the fact by a summarizer working under token pressure, and require a pin check at any point with irreversible stakes — restarting a production service is exactly the kind of action that should force the check, echoing Module 02 §2.4's phase-gating discipline.</li>
+<li><strong>TTL staleness.</strong> A semantic-tier fact gets served past the point it stopped being true because its TTL was set for storage convenience rather than the fact's real-world half-life. Symptom: the agent acts on a memory read that's contradicted by a live tool result it just fetched, and trusts the stale memory because it's phrased confidently or was written more recently than the underlying fact actually changed. Mitigation: attach a revalidation rule — not just a TTL — to any semantic fact with an external ground truth, and treat memory as a hint that earns trust from freshness, never a substitute for a live check before a high-stakes action.</li>
+</ol>
+</div>
+
+<h2><span class="sec">§ 4.6</span> Progressive disclosure as the default posture</h2>
+<p>Every mitigation above shares one shape: load less by default, expand only when the agent's own behavior signals it needs more. The memory tool's just-in-time retrieval (§4.3) is the clearest instance — Claude checks the <code>/memories</code> directory listing before reading any file in full, rather than front-loading every file's contents on every turn. The same discipline applies to retrieval and computed context generally: default to a pointer or a one-line summary, and only expand to the full source when a follow-up question or a failed check indicates the summary wasn't enough. Skills (Module 08) apply exactly this pattern at the harness level — a short front-matter description loaded always, the full skill body loaded only when selected — and that module covers the authoring mechanics in depth; here the point is narrower: progressive disclosure is the reason a bigger window doesn't make context engineering optional. A 1M-token window without this discipline just means you can afford to stuff more low-relevance material in before hitting a hard error — you arrive at the soft-rot problem from §4.1 on a fuller, more expensive context, not a smaller one.</p>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — adopt the vendor's compaction API, or hand-roll your own?</div>
+<p>Adopt the vendor primitive (context editing, compaction) when you're already committed to that provider's stack and your summarization needs are generic — age-based, tool-result-heavy, no unusual pinning logic. You get server-side, cache-friendly compaction with no orchestration code to maintain, and the vendor's benchmark numbers (§4.2) are a reasonable prior for what to expect.</p>
+<p>Hand-roll when you need domain-specific pinning (evidence-gated facts with an audit trail, as in this module's code), custom TTL logic across tiers, or the identical behavior across more than one model provider. The tell: if "what counts as pin-worthy" is a business rule your risk owner needs to approve — the same discipline Module 02 §2.2 applied to the auto-approve threshold — that logic belongs in code you own, with the vendor primitive handling the generic bulk-summarization underneath it if you want to layer them.</p>
+</aside>
+
+<h2><span class="sec">§ 4.7</span> Lab — give loopbot working memory and compaction; survive 100 turns</h2>
+<div class="block">
+<div class="hd">LAB 04 · Estimated 4–6 hours</div>
+<p><strong>Mission:</strong> extend Module 00's <code>loopbot</code> with §4.2's compaction manager and §4.3's Redis-backed memory tiers, then run it through a scripted 100-turn incident-investigation task and prove — via transcript and <code>curl</code>, not a passing unit test — that a fact established at turn 4 is still correctly honored at turn 100.</p>
+<p><strong>Spec:</strong></p>
+<ol>
+<li>Build a synthetic 100-turn task harness that feeds loopbot a stream of tool outputs (logs, status checks) simulating an incident. At turn 4, inject a constraint ("service X is frozen, do not restart it") with a verifiable <code>evidence_ref</code>. Ensure the raw transcript crosses your <code>COMPACT_THRESHOLD_TOKENS</code> at least 3 times before turn 100.</li>
+<li>Wire in §4.2's compaction manager: pinned facts pass through every compaction verbatim; everything else gets summarized. Wire in §4.3's Redis store for the scratchpad/episodic/semantic tiers, and §4.4's FastAPI endpoints.</li>
+<li>Log every turn, every compaction event (before/after token counts), and every memory read/write to a JSONL transcript — this is your evidence, not a side effect.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ <code>curl -s localhost:8000/agents/incident-4471/pinned</code> at turn 100 returns the turn-4 constraint verbatim, with its original <code>evidence_ref</code> unchanged.</li>
+<li>✅ The transcript shows at least 3 compaction events; for each, <code>tokens_after</code> is under 25% of <code>tokens_before</code> — the savings are measured, not asserted.</li>
+<li>✅ Run the identical 100-turn task a second time with pinning disabled (facts flow only through the lossy summarizer). Show, via a transcript diff, that the agent violates the constraint — attempts the forbidden restart — somewhere after the first compaction event that should have carried it forward. This is the side-by-side proof that pinning is load-bearing, not decorative.</li>
+<li>✅ A golden check at turn 100: grade the agent's final action against a rubric that specifically checks whether it <em>recalled</em> the freeze (cited the pinned fact) rather than <em>re-derived</em> it by re-reading the entire transcript. Write 5 sentences on whether quality held across the full 100 turns.</li>
+</ul>
+<p><strong>Stretch:</strong> at the end of the run, write an episodic-tier entry summarizing what resolved the incident. Start a second synthetic run for a similar incident and confirm loopbot retrieves that episodic note at turn 5 instead of re-deriving the same fix from scratch.</p>
+</div>
+
+<h2><span class="sec">§ 4.8</span> Consultant's checklist</h2>
+<div class="block">
+<div class="hd">Questions to ask any team running long-lived or long-running agents</div>
+<ul>
+<li>Where is the line between "in context" and "needs a lookup" drawn today — deliberately, or wherever the last engineer stopped adding tool results?</li>
+<li>Has anyone measured this agent's own accuracy as a function of context fullness, or is "it has a 1M-token window" being treated as equivalent to "it's fine"?</li>
+<li>What triggers compaction — a measured token threshold, or does the session just error out and restart from zero?</li>
+<li>Which facts are pinned, who decided they were pin-worthy, and does that decision carry an evidence reference or just an assertion?</li>
+<li>What's the TTL on every external memory write, and was it chosen from the fact's real-world half-life or copied from another tier's default?</li>
+<li>Can you produce, right now, a <code>curl</code> command that shows what this agent "remembers" about a specific past decision? If not, the memory is unauditable — for anything high-stakes, that's equivalent to not having it.</li>
+<li>When a summarizer call fails or times out mid-compaction, does the session lose everything, or degrade gracefully to "no compaction this round, retry next turn"?</li>
+</ul>
+</div>
+
+<h2><span class="sec">§ 4.9</span> Design-review questions (staff+)</h2>
+<div class="block">
+<div class="hd">Interview / design-review bank</div>
+<ol>
+<li><strong>A team upgrades to a model with a 5x larger context window and removes their existing summarization step to "let the model handle it." Accuracy silently drops. Diagnose.</strong> <em>Strong answers reject "bigger window solves retrieval" outright, point to lost-in-the-middle-style degradation starting well before the window is full, and ask for accuracy-vs-context-fullness measurements on the team's own traces before accepting "the model can just hold it all" as an architecture decision.</em></li>
+<li><strong>Design the memory layer for a long-running support agent that must remember a customer's stated preferences across sessions but must never act on stale billing information.</strong> <em>Strong answers put preferences in the semantic tier with a long TTL, but give billing-adjacent facts a revalidation rule instead of a TTL — recheck the live source before any money-touching action — tying directly back to Module 02 §2.2: memory informs the proposal, live data gates execution.</em></li>
+<li><strong>A teammate proposes fixing a 100-turn quality-collapse problem by switching to a fresh subagent every 20 turns instead of adding compaction. Steelman both, then decide.</strong> <em>Strong answers concede isolation genuinely sidesteps rot (Module 03's argument), but note it forfeits continuity — the fresh subagent doesn't know about turn 4's constraint unless it's handed a brief containing it, which is compaction's job under another name. Land on: compaction for one continuous identity that must remember; fresh subagents when the next chunk of work doesn't need continuity at all — not a blanket either/or.</em></li>
+<li><strong>Your compaction summarizer occasionally fabricates a detail that wasn't in the transcript it condensed. Diagnose and fix.</strong> <em>Strong answers name this as context poisoning at the summarization boundary itself — the summarizer is a probabilistic step whose output later turns will trust as settled. Apply Module 01 §1.5's boundary discipline: validate any pinned-facts list's evidence_ref against the actual transcript before accepting it, and never let free-text summary content silently become an unverified fact a later turn cites as given.</em></li>
+<li><strong>How do you decide whether a fact belongs in the system prompt (Module 02 §2.3), a pinned fact, or semantic memory?</strong> <em>Strong answers use scope and lifetime as the test: system prompt facts hold for this agent regardless of session (role, non-negotiables); pinned facts hold for this specific task and are dangerous to lose (survive compaction, scoped to the session); semantic memory holds across sessions but should be looked up when relevant, not force-loaded everywhere. The tell: if hard-coding it into the system prompt would apply to sessions where it's irrelevant, it belongs in memory, not the prompt.</em></li>
+</ol>
+</div>
+
+<h2><span class="sec">§ 4.10</span> Go deeper</h2>
+<ul>
+<li><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Anthropic engineering — Effective context engineering for AI agents</a> (the budget framing and the compaction+memory combination this module builds on)</li>
+<li><a href="https://platform.claude.com/docs/en/build-with-claude/compaction">Claude docs — Compaction</a> (the <code>compact-2026-01-12</code> beta surface used in §4.2's TypeScript tab; verify current header/threshold defaults here)</li>
+<li><a href="https://arxiv.org/abs/2307.03172">Liu et al. — Lost in the Middle: How Language Models Use Long Contexts</a> (the U-shaped retrieval-accuracy result behind §4.1's rot framing)</li>
+<li><a href="https://arxiv.org/abs/2310.08560">Packer et al. — MemGPT: Towards LLMs as Operating Systems</a> (the tiered virtual-memory model behind §4.3's five-tier taxonomy)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-13 · Volatile surfaces: exact context-window sizes per model, the compaction/context-editing beta header names (<code>compact-2026-01-12</code>, <code>context-management-2025-06-27</code>) and their reported performance deltas (29% / 39% / ~84%) — verify against current docs before citing any of these in a proposal. The three-way context budget, the tiered-memory taxonomy, and the poisoning/distraction/rot failure modes are stable architecture.</p>
+
+<nav class="pager">
+  <a href="module-03.html">← MODULE 03 — MULTI-AGENT ARCHITECTURES</a>
+  <span class="disabled">NEXT: MODULE 05 — FRAMEWORKS: THE HONEST COMPARISON (QUEUED)</span>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
