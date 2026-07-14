@@ -302,7 +302,7 @@
         <h2>The Agentic Systems Field Manual</h2>
         <p>A 16-module, principal-level path through agentic AI — build it, apply it, consult on it. Labs, failure modes, and three-track code in every module.</p>
       </span>
-      <span class="mb-status"><b>M00–M03 PUBLISHED</b><br>12 QUEUED · OPEN →</span>
+      <span class="mb-status"><b>M00–M05 PUBLISHED</b><br>10 QUEUED · OPEN →</span>
     </a>
   </div>
   <div class="toolbar">
@@ -353,6 +353,123 @@
      data-hue (0-360), data-blurb.
      ====================================================================== -->
 <main id="articles">
+
+<article class="topic" id="claude-code-china-backdoor"
+  data-title="Claude Code Had a Hidden China-Detection Backdoor — Encoded as Invisible Unicode Swaps"
+  data-date="2026-07-14" data-tag="Security" data-emoji="🕵️" data-hue="355"
+  data-blurb="Since April, Claude Code silently fingerprinted users' timezones and proxy domains against a 147-entry list of Chinese tech firms, then encoded the result as invisible apostrophe swaps in its own system prompt. Alibaba banned the tool; Anthropic quietly patched it July 1. How to check your own agent's traffic.">
+<p class="stamp">date added: 2026-07-14</p>
+
+<h4>What it is</h4>
+<p>On June 30, a Reddit user (LegitMichel777) published a reverse-engineering writeup showing that Claude Code had shipped, since version 2.1.91 (April 2, 2026) with no mention in any release notes, code that checked the user's system timezone against <code>Asia/Shanghai</code> and <code>Asia/Urumqi</code> and scanned outbound proxy hostnames against a decoded, XOR-obfuscated (key <code>91</code>) list of 147 domains belonging to Chinese tech companies and AI labs — Baidu, Alibaba, Ant Group, ByteDance, Moonshot AI, MiniMax, Stepfun among them. The result wasn't logged anywhere visible: it was steganographically encoded back into the CLI's own system prompt. The literal date line <strong>"Today's date is 2026-06-30"</strong> would silently flip its separator to a slash format if the timezone matched, and the apostrophe in <em>"Today's"</em> would swap between four visually-identical Unicode characters (plain ASCII, U+2019, U+02BC, U+02B9) to encode which of the two checks — domain list, keyword list, both, or neither — had matched. Nothing about this appeared in a changelog, a system-prompt diff a user could read normally, or any disclosure. Alibaba ordered internal use of Claude Code banned effective July 10 and told employees to switch to its own Qoder tool; Anthropic's Thariq Shihipar said the code was "an experiment we launched in March" to fight reseller abuse and model distillation, and that the PR removing it merged July 1 — a week before the ban took effect, after roughly three months in production with zero disclosure.</p>
+
+<h4>Why it's trending</h4>
+<p>It's a different threat model from the prompt-injection stories already on this board (Friendly Fire/Agentjacking, the Langflow RCE chain) — those are outsiders hijacking an agent's trust in content it reads. This is the vendor's own tool covertly fingerprinting and flagging its users, inside the one artifact — the system prompt — that engineers most assume they can trust and, if curious, actually read. It also lands squarely on an active dispute: Anthropic told two US senators in June that Alibaba-affiliated accounts had run a 28.8-million-exchange distillation attack against Claude, and this backdoor is being read as the covert enforcement mechanism for that fight — collateral-damaging every ordinary developer whose timezone or ISP happened to match the list. If a tool you run daily can silently fingerprint you via characters that render identically on screen, "read the diff before you trust it" stops being sufficient advice.</p>
+
+<h4>Hands-on tutorial: check what your own coding agent is actually sending</h4>
+<ol>
+  <li>Check your installed Claude Code version and update if you're behind the July 1 fix:
+<pre><code>claude --version
+npm view @anthropic-ai/claude-code version   # latest published version, for comparison</code></pre></li>
+  <li>Put a logging HTTPS proxy between your CLI and the API so you can see the exact bytes of the system prompt it sends — this technique works for auditing <em>any</em> CLI tool that wraps an LLM API, not just this one:
+<pre><code>pip install mitmproxy
+mitmweb --mode regular --listen-port 8080</code></pre>
+  In a second terminal, route the CLI's traffic through it and trust mitmproxy's local CA for the session:
+<pre><code>export HTTPS_PROXY=http://localhost:8080
+export SSL_CERT_FILE=~/.mitmproxy/mitmproxy-ca-cert.pem
+claude "say hello"</code></pre></li>
+  <li>In the mitmweb UI, find the outbound request to <code>api.anthropic.com/v1/messages</code>, open its body, and copy the literal text of the <code>"Today's date is ..."</code> line from the <code>system</code> field.</li>
+  <li>Check it for non-ASCII characters hiding in plain sight — this is exactly the check the original disclosure ran:
+<pre><code>text = "Today's date is 2026-07-14"  # paste the exact line you captured
+for ch in text:
+    if ord(ch) > 127:
+        print(repr(ch), hex(ord(ch)))
+print("clean" if all(ord(c) <= 127 for c in text) else "non-ASCII character found")</code></pre></li>
+  <li><strong>Expected result:</strong> on a patched version, the script prints "clean." If you're on an unpatched build (2.1.91 through the July 1 fix) and your apostrophe isn't the plain ASCII <code>'</code> (U+0027), you've reproduced the exact marker the disclosure found. Either way, you now have a repeatable way to audit any agent CLI's actual wire traffic instead of trusting its changelog.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://cybersecuritynews.com/anthropic-claude-hidden-code/">Cybersecurity News: Anthropic's Claude Code reportedly uses hidden code to detect Chinese users</a></li>
+  <li><a href="https://mlq.ai/news/anthropic-embeds-hidden-china-detection-code-in-claude-code-as-alibaba-orders-tool-banned-by-july-10/">MLQ News: Anthropic embeds hidden China-detection code as Alibaba orders the tool banned</a></li>
+  <li><a href="https://mlq.ai/news/anthropic-removes-hidden-code-from-claude-code-that-covertly-flagged-chinese-users/">MLQ News: Anthropic removes the hidden code that covertly flagged Chinese users</a></li>
+  <li><a href="https://www.tomshardware.com/tech-industry/artificial-intelligence/alibaba-bans-anthropics-claude-code-after-an-alleged-hidden-china-detection-backdoor-is-uncovered-employees-told-to-switch-to-qoder-as-the-rift-between-the-firms-widens">Tom's Hardware: Alibaba bans Claude Code after the alleged backdoor is uncovered</a></li>
+</ul>
+</article>
+
+<article class="topic" id="claude-tag-artifacts-sharing"
+  data-title="Claude Code Artifacts Go Multiplayer: Public Links, Shared Editors, and Building Them From Slack"
+  data-date="2026-07-14" data-tag="Dev Tools" data-emoji="🧵" data-hue="265"
+  data-blurb="An artifact used to belong to whoever's session created it. Now a teammate can be made an editor, anyone can get a no-login public link, and Claude Tag can publish one straight from a Slack thread. The exact settings paths and a two-person test to run today.">
+<p class="stamp">date added: 2026-07-14</p>
+
+<h4>What it is</h4>
+<p>Anthropic extended Claude Code's <strong>Artifacts</strong> feature — publishing a session's output as a live page on claude.ai, e.g. a PR walkthrough or a dashboard built from data the session pulled — in two directions this week. First, <strong>public sharing</strong>: on Pro/Max plans a public link was already the only sharing option; on Team/Enterprise it was previously scoped to signed-in org members only, and is now available as an org-wide toggle any Owner can flip on, producing a link anyone on the internet can open with no claude.ai account. Second, <strong>multiplayer editing</strong>: a viewer you've shared an artifact with can now be promoted to <strong>editor</strong> — they publish new versions the same way you'd update it from a different session, by handing Claude the artifact's URL and asking for a revision, and everyone with the page open sees each update live. Both capabilities are also reachable through <strong>Claude Tag</strong>, Anthropic's persistent, taggable (<code>@Claude</code>) AI teammate for a Slack channel that entered public beta June 23 — a Claude Tag session can publish and update an artifact directly from a Slack thread, since it authenticates through the agent's own identity rather than a personal login.</p>
+
+<h4>Why it's trending</h4>
+<p>It's a small feature update with an outsized workflow implication: the artifact stops being one person's export and becomes a genuinely shared surface — a triage board, a migration checklist, or an investigation timeline that an entire team edits and watches update in place, instead of a link someone re-pastes into Slack every time it changes. Landing it inside Claude Tag specifically is the more pointed move: Anthropic is pushing collaborative AI output into the channel where the work already happens rather than a separate claude.ai tab, and Anthropic's own product teams reportedly already route roughly 65% of their code changes through an internal version of this same multiplayer pattern.</p>
+
+<h4>Hands-on tutorial: build one artifact and hand editing rights to a teammate</h4>
+<ol>
+  <li>Confirm eligibility: Claude Code CLI ≥ v2.1.183 (or the desktop app), signed in with <code>/login</code> (an API key or gateway-token session can't publish), on a Pro, Max, Team, or Enterprise plan.</li>
+  <li>Ask Claude Code for something genuinely easier to look at than to read as text — the strongest fit for an artifact:
+<pre><code>Make an artifact that walks through this PR with the diff annotated inline.</code></pre>
+  Approve the publish prompt when Claude asks; press <code>Ctrl+]</code> at any time to reopen the most recent artifact from your terminal.</li>
+  <li>Open the artifact in your browser and click <strong>Share</strong> in the page header. Add a teammate and switch their role from <strong>viewer</strong> to <strong>editor</strong> (Team/Enterprise plans).</li>
+  <li>Have that teammate update it from their own session — no access to your terminal needed, just the URL:
+<pre><code>Update https://claude.ai/code/artifact/&lt;id&gt; with today's numbers.</code></pre>
+  Confirm you see their revision appear live on the page you still have open.</li>
+  <li>If you're an org Owner and want a no-login public link available org-wide: go to <strong>Settings &gt; Claude Code &gt; Capabilities</strong> in claude.ai admin settings and turn on <strong>External sharing</strong> under the Artifacts toggle — off by default on Team/Enterprise, so members can only share within the org until you do this.</li>
+  <li><strong>Expected result:</strong> one URL, two authors, updating in place — and, if you enabled it, a link you can hand to someone with no claude.ai account at all. If Claude says it can't publish, re-check the Availability requirements above (API-key sessions, Bedrock/Vertex/Foundry, and CMEK/HIPAA/zero-data-retention orgs are all excluded).</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://code.claude.com/docs/en/artifacts">Claude Code Docs: share session output as artifacts</a></li>
+  <li><a href="https://www.latent.space/p/ainews-claude-tag-multiplayer-proactive">Latent Space: Claude Tag — multiplayer, proactive, persistent agents in Slack</a></li>
+  <li><a href="https://mer.vin/2026/06/claude-tag-explained-anthropics-multiplayer-ai-teammate-for-slack-beta/">Mervin Praison: Claude Tag explained — Anthropic's multiplayer AI teammate for Slack (beta)</a></li>
+  <li><a href="https://www.digitalapplied.com/blog/anthropic-claude-tag-slack-team-collaboration-2026">Digital Applied: Claude Tag in Slack — multiplayer AI teamwork in 2026</a></li>
+</ul>
+</article>
+
+<article class="topic" id="github-spec-kit-sdd"
+  data-title="Spec-Driven Development: GitHub Spec Kit's /speckit Workflow Is Eating &quot;Vibe Coding&quot;"
+  data-date="2026-07-14" data-tag="Skills" data-emoji="📋" data-hue="130"
+  data-blurb="A versioned spec, not a chat prompt, becomes the source of truth an agent codes against — constitution, spec, plan, tasks, implement. 111K+ stars, 30+ agent integrations, and a governance bundle updated yesterday. The five commands to try on your next feature.">
+<p class="stamp">date added: 2026-07-14</p>
+
+<h4>What it is</h4>
+<p><strong>Spec-Driven Development (SDD)</strong> is a workflow where a structured, versioned specification — not a one-shot chat prompt — is the artifact an AI coding agent actually codes against: write the spec, derive a plan, break the plan into checkable tasks, then let the agent implement against that trail. <strong>GitHub Spec Kit</strong>, GitHub's open-sourced reference implementation, ships a CLI (<code>specify</code>) plus five slash commands that plug into 30+ coding agents (Claude Code, Copilot, Cursor, Gemini CLI, Codex CLI, Windsurf, and more, per the 0.11.0 integration list): <code>/speckit.constitution</code> (project principles), <code>/speckit.specify</code> (requirements and user stories), <code>/speckit.plan</code> (tech stack and architecture), <code>/speckit.tasks</code> (actionable task breakdown), and <code>/speckit.implement</code> (execute against the plan). The project has shipped an unusually fast release cadence since its debut — 111K+ stars and 55+ releases as of mid-2026 — with community add-ons like secure-by-default governance bundles updated as recently as July 13.</p>
+
+<h4>Why it's trending</h4>
+<p>It's the engineering community's organized answer to a specific failure mode of "vibe coding": a bare prompt like "add login" is underspecified, the agent fills the gaps with its own defaults, and by the time a codebase outgrows the agent's effective context window there's no durable record of what was actually decided — only whatever survived in code. SDD proponents (GitHub, AWS Kiro, and a wave of framework-specific forks) report 3–10× higher first-pass success rates on non-trivial tasks once the spec, not the prompt, is what gets reviewed and versioned. It's a complement to, not a replacement for, the <a href="#context-engineering">context engineering</a> already covered on this board: a <code>CLAUDE.md</code>/<code>AGENTS.md</code> file shapes what an agent can see; SDD shapes what it's being asked to build and how that request gets checked before code is written.</p>
+
+<h4>Hands-on tutorial: run the five-command workflow on one real feature</h4>
+<ol>
+  <li>Install the <code>uv</code> package manager (see <a href="https://docs.astral.sh/uv/">docs.astral.sh/uv</a> for your platform), then install Spec Kit's CLI, pinning to the latest release tag rather than trusting <code>main</code>:
+<pre><code>uv tool install specify-cli --from git+https://github.com/github/spec-kit.git@v0.12.11</code></pre></li>
+  <li>Bootstrap a project, naming the coding agent you actually use:
+<pre><code>specify init my-feature --integration claude
+cd my-feature</code></pre></li>
+  <li>Inside your agent's chat (Claude Code, Copilot, whichever you picked above), run the workflow in order on one small, real feature — not a toy example:
+<pre><code>/speckit.constitution
+/speckit.specify   "Add rate limiting to the public signup endpoint: 5 requests
+                     per IP per minute, 429 with Retry-After on excess."
+/speckit.plan
+/speckit.tasks
+/speckit.implement</code></pre></li>
+  <li>Read what each command actually produced before moving to the next one — the spec and plan are markdown files in your project, meant to be reviewed and edited like code, not skipped past.</li>
+  <li><strong>Expected result:</strong> a checked-in spec/plan/tasks trail alongside the implementation, and — the real test — run the same feature request through your normal one-shot prompt on a fresh branch and count how many wrong assumptions each approach made. The gap is the argument for adopting SDD on anything bigger than a one-file fix.</li>
+</ol>
+
+<h4>Go deeper</h4>
+<ul>
+  <li><a href="https://github.com/github/spec-kit">GitHub: github/spec-kit</a></li>
+  <li><a href="https://martinfowler.com/articles/exploring-gen-ai/sdd-3-tools.html">Martin Fowler: understanding spec-driven development — Kiro, spec-kit, and Tessl</a></li>
+  <li><a href="https://visualstudiomagazine.com/articles/2026/05/12/github-spec-kit-takes-off-as-antidote-to-piecemeal-vibe-coding.aspx">Visual Studio Magazine: GitHub Spec Kit takes off as antidote to piecemeal vibe coding</a></li>
+  <li><a href="https://developer.microsoft.com/blog/spec-driven-development-ai-native-engineering">Microsoft for Developers: spec-driven development — a spec-first approach to AI-native engineering</a></li>
+</ul>
+</article>
 
 <article class="topic" id="mcp-2026-07-28-rc"
   data-title="MCP's Biggest Rewrite Yet: the 2026-07-28 Release Candidate Drops Sessions Entirely"

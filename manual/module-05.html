@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 05 — Frameworks: The Honest Comparison · Agentic Systems Field Manual</title>
+<!--
+  FRONT MATTER (for the ledger — see SCHEDULED_TASK_PROMPT.md / daily-run spec)
+  title: Frameworks: The Honest Comparison
+  slug: module-05-frameworks-the-honest-comparison
+  pillar: Frameworks & Harnesses (Field Manual Module 05, Architecture track)
+  difficulty: Practitioner
+  series: The Agentic Systems Field Manual (module 6 of 16 + 3 capstones)
+  tags: langgraph, pydantic-ai, claude-agent-sdk, openai-agents-sdk, checkpointing, framework-lock-in
+  meta description: An honest, axis-by-axis comparison of LangGraph, PydanticAI, Claude Agent SDK, OpenAI Agents SDK, CrewAI, AG2, Spring AI/LangGraph4j, Semantic Kernel, smolagents, and Mastra — with the same tool-call loop ported across four of them and a real migration-cost memo.
+  read time: ~26 min (~6,200 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .tbl-wrap { overflow-x: auto; margin: 1.4rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .86rem; background: var(--panel); }
+  th {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .66rem; letter-spacing: .1em; text-transform: uppercase;
+    text-align: left; color: var(--muted);
+    border-bottom: 2px solid var(--ink);
+    padding: .55rem .7rem;
+  }
+  td { border-bottom: 1px solid var(--border); padding: .6rem .7rem; vertical-align: top; }
+  td:first-child { font-weight: 700; white-space: nowrap; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← Field Manual</a>
+  <span>AGENTIC SYSTEMS FIELD MANUAL · MODULE 05 / 15</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">FM-05 · Architecture</div>
+  <h1>Frameworks: The Honest Comparison</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Ten frameworks, one axis-by-axis table, the same tool-call loop ported four ways — and the migration-cost numbers nobody puts in the pitch deck.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-14</b></span>
+    <span>DEPTH <b>~6,200 words</b></span>
+    <span>PREREQS <b>Module 02</b></span>
+    <span>LAB <b>port one workflow across two frameworks + no-framework; write the migration-cost memo</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§ 5.0</span> Orientation</h2>
+<p>Module 00's <code>loopbot</code> shipped as roughly 120 lines: a while-loop, a tool dispatch table, a turn cap, a JSONL transcript. It worked. Then a PM asked for a pause-for-approval step before any destructive tool call, an SRE asked for the run to survive a pod restart without starting over, and a frontend engineer asked for live progress in the UI instead of tailing a log file. None of those are exotic asks — they're Module 01's typed proposal boundary, Module 09's checkpoint/resume, and Module 01 §1.2's SSE pattern, respectively. But now three people are asking for three capabilities in the same sprint, and "we'll add it to the while-loop" starts to sound like a framework's job description read back to you one feature at a time. That's the actual moment teams reach for a framework — not because the loop is hard, but because the surrounding capabilities compound faster than a hand-rolled harness can absorb them under deadline pressure.</p>
+<p>This module is not a listicle. It's an axis-by-axis comparison of the frameworks a senior engineer will actually be asked to choose among in 2026 — LangGraph (and LangGraph4j for the JVM), PydanticAI, Claude Agent SDK, OpenAI Agents SDK, CrewAI, AG2 (the community-maintained AutoGen fork), Spring AI, Semantic Kernel, smolagents, and Mastra — plus the no-framework baseline, which stays a first-class option throughout, not a strawman. The same minimal tool-call loop gets ported across four of them in §5.3 so the differences are concrete, not adjectival. As of this writing (2026-07-14), version numbers and API surfaces below are moving targets; the axes they move along — control flow, state, streaming, HITL, typed I/O, lock-in — are stable enough to plan a decision around.</p>
+
+<h2><span class="sec">§ 5.1</span> What a framework actually buys — and what it costs</h2>
+<p>Strip the marketing and every agent framework is selling some subset of six capabilities, all of which Module 00–04 already showed you how to build by hand: (1) a control-flow model for sequencing steps and branching, (2) state persistence and checkpointing so a killed process resumes instead of restarting, (3) streaming primitives for surfacing partial progress, (4) human-in-the-loop interrupt points, (5) a typed input/output contract at the model boundary, and (6) observability — traces, spans, cost accounting. None of these is beyond a competent team's ability to build. What a framework actually buys is that someone else already built them, tested them against edge cases you haven't hit yet, and will keep maintaining them — for the price of adopting that framework's opinion about how each one should work.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 260" role="img" aria-label="Two columns: the no-framework loop from Module 00 with three capabilities built in, next to a framework offering six capabilities, connected by an arrow labeled every added capability is also an added opinion you now depend on.">
+  <defs>
+    <marker id="f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="26" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">NO FRAMEWORK — MODULE 00 LOOPBOT</text>
+  <rect x="20" y="36" width="330" height="170" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="45" y="60" width="280" height="30" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="185" y="80" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">while-loop control flow</text>
+  <rect x="45" y="100" width="280" height="30" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="185" y="120" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">turn cap + JSONL transcript</text>
+  <rect x="45" y="140" width="280" height="30" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="185" y="160" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">typed proposal boundary</text>
+  <text x="185" y="196" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">~120 lines, fully legible</text>
+
+  <text x="490" y="26" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">A FRAMEWORK</text>
+  <rect x="490" y="36" width="370" height="170" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="510" y="52" width="160" height="26" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.1"/><text x="590" y="70" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">control flow (graph)</text>
+  <rect x="680" y="52" width="160" height="26" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.1"/><text x="760" y="70" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">checkpointing</text>
+  <rect x="510" y="86" width="160" height="26" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.1"/><text x="590" y="104" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">streaming events</text>
+  <rect x="680" y="86" width="160" height="26" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.1"/><text x="760" y="104" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">HITL interrupt</text>
+  <rect x="510" y="120" width="160" height="26" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.1"/><text x="590" y="138" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">typed I/O</text>
+  <rect x="680" y="120" width="160" height="26" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.1"/><text x="760" y="138" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">tracing/spans</text>
+  <text x="675" y="188" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">six capabilities, one vendor's opinion each</text>
+
+  <line x1="350" y1="121" x2="485" y2="121" stroke="var(--warn)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#f1)"/>
+  <text x="418" y="240" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--warn)" font-weight="700">every added capability is also an added opinion you now depend on</text>
+</svg>
+<figcaption><b>FIG 5.1</b> — A framework doesn't add new capabilities to the field — it packages capabilities Module 00–04 already showed you how to build, at the cost of adopting someone else's opinion about each one.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  subgraph NF[No framework]
+    W[while-loop] --> T[turn cap + transcript] --> P[typed proposal boundary]
+  end
+  subgraph FW[A framework]
+    C1[control flow] & C2[checkpointing] & C3[streaming] & C4[HITL] & C5[typed I/O] & C6[tracing]
+  end
+  NF -.->|opinion tax| FW</pre>
+</details>
+</figure>
+
+<p>The corollary: don't evaluate a framework by counting its features. Evaluate it by which of the six axes above you actually need this quarter, and how much you'll pay in the framework's own opinions to get them. A framework that nails checkpointing but forces its state shape into every node's function signature is a great trade if you need checkpointing and a bad one if you don't.</p>
+
+<h2><span class="sec">§ 5.2</span> The honest table</h2>
+<p>Ten frameworks plus the no-framework baseline, six axes. Treat every cell as a snapshot — version churn in this space is real — but the relative positioning (graph-based vs. conversational vs. type-first vs. provider-native) is a durable way to reason about the category, not just this week's release notes.</p>
+
+<div class="tbl-wrap">
+<table>
+<thead><tr><th>Framework</th><th>Control flow</th><th>State / checkpoint</th><th>Streaming</th><th>HITL</th><th>Typed I/O</th><th>Lock-in</th></tr></thead>
+<tbody>
+<tr><td>No framework</td><td>You write it (M00–02)</td><td>You write it (M09)</td><td>You write it (M01 §1.2)</td><td>You write it</td><td>Pydantic/Zod, your choice</td><td>None — the point</td></tr>
+<tr><td>LangGraph</td><td>Explicit directed graph, you own every edge</td><td>Built-in — Memory/Sqlite/PostgresSaver, time-travel</td><td>Native event streaming per node</td><td><code>interrupt()</code> primitive, pause/resume mid-graph</td><td>Typed state schema (TypedDict/Pydantic)</td><td>Moderate — graph shape is portable logic, but checkpoint format isn't</td></tr>
+<tr><td>LangGraph4j</td><td>Same graph model, JVM-native</td><td>Same checkpointer interface, Postgres/JDBC-backed</td><td>Node-level events via listeners</td><td><code>interruptBefore</code>/<code>interruptAfter</code> in <code>CompileConfig</code></td><td>Java records / POJOs as state</td><td>Same as LangGraph, plus Spring bean wiring</td></tr>
+<tr><td>PydanticAI</td><td>Function-call-driven, thin — you still write the loop shape</td><td>None built-in — bring your own store</td><td>Token-level streaming via <code>run_stream</code></td><td>None built-in — a tool that raises is your gate</td><td>First-class — the framework's entire premise</td><td>Low — it's mostly typing sugar over any model API</td></tr>
+<tr><td>Claude Agent SDK</td><td>Managed agent loop with hooks at defined lifecycle points</td><td>Session-based; durable state across restarts is your infra, not the SDK's</td><td>Native message-stream iteration</td><td>Hooks (<code>PreToolUse</code>/<code>PostToolUse</code>) as deterministic gates</td><td>Structured tool schemas; output typing is your responsibility</td><td>Claude-model-native by design</td></tr>
+<tr><td>OpenAI Agents SDK</td><td>Agents + handoffs — a small, opinionated primitive set</td><td>Session snapshotting with rehydration</td><td>Native streaming events</td><td>Guardrails + approval callbacks</td><td>Pydantic-typed tool schemas</td><td>OpenAI-model-native by design</td></tr>
+<tr><td>CrewAI</td><td>Role-based: sequential or hierarchical "crew" processes</td><td>Limited — no first-class checkpointing</td><td>Coarse — task-level, not node-level</td><td>Basic human-input tool, not a graph-level gate</td><td>Task outputs, loosely typed by default</td><td>Low code lock-in, high conceptual lock-in (roles/crews)</td></tr>
+<tr><td>AG2 (AutoGen fork)</td><td>Conversational — agents negotiate via a GroupChat controller</td><td>Emerging — improving but not LangGraph-grade</td><td>Per-message streaming</td><td>Human-proxy agent as a participant</td><td>Weak by default — conversation-shaped, not schema-shaped</td><td>Low code, but the conversational model is hard to port out of</td></tr>
+<tr><td>Spring AI</td><td>Advisors/chain composition; graph orchestration deferred to LangGraph4j</td><td>ChatMemory abstractions; durable checkpointing needs LangGraph4j</td><td>Reactive streams (Project Reactor)</td><td>Not first-class — build it as an Advisor</td><td>Structured output via <code>BeanOutputConverter</code></td><td>Spring/JVM ecosystem lock-in, model-agnostic</td></tr>
+<tr><td>Semantic Kernel</td><td>Planner + plugin model, function-calling loop</td><td>Chat history abstractions; checkpointing is thinner than LangGraph's</td><td>Streaming completions</td><td>Filters as interception points</td><td>Native C#/.NET typing; weaker in Python parity</td><td>Microsoft-ecosystem leaning, model-agnostic</td></tr>
+<tr><td>smolagents</td><td>The LLM writes and runs Python code directly, not tool JSON</td><td>None built-in — intentionally minimal</td><td>Basic</td><td>None built-in</td><td>None — code-as-action is the whole bet</td><td>Very low — read the source in an afternoon</td></tr>
+<tr><td>Mastra</td><td>Graph-based workflows (<code>.then()/.branch()/.parallel()</code>)</td><td>Built-in memory with recency/semantic retrieval</td><td>Native, TypeScript-first</td><td>Workflow suspend/resume points</td><td>Zod schemas throughout</td><td>Moderate — TypeScript-ecosystem-native</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Three patterns worth naming explicitly. First, the provider-native SDKs (Claude Agent SDK, OpenAI Agents SDK) buy you the tightest integration with their own model family's features — hooks, guardrails, computer use — at the explicit cost of portability; picking one is a bet on that vendor, not a neutral technical choice. Second, "typed I/O" is not evenly distributed: PydanticAI and Mastra treat it as the framework's entire reason to exist, while CrewAI and AG2 treat it as something you bolt on, which matters enormously once Module 01's verification funnel (§1.5) is the thing standing between a malformed plan and a scheduler crash. Third, checkpointing quality tracks almost exactly with how graph-shaped the framework is — LangGraph/LangGraph4j and Mastra checkpoint at node boundaries because their control-flow model has explicit boundaries to checkpoint at; conversational frameworks (AG2, CrewAI) don't, because a multi-turn negotiation doesn't have a clean "resume point" the way a DAG node does.</p>
+
+<h2><span class="sec">§ 5.3</span> The same loop, four ways</h2>
+<p>Abstractions are cheap to describe and expensive to feel. Below is the same minimal capability — Module 00's tool-call turn, propose an action, validate it, execute it — implemented with no framework, with LangGraph, with the Claude Agent SDK, and with Spring AI + LangGraph4j. Read them side by side, not for syntax trivia, but for where each one puts the seam between "the model's idea" and "code that actually runs it."</p>
+
+<div class="code-tabs">
+  <div class="tab-row" role="tablist">
+    <button class="tab-btn active" role="tab">No framework — Python</button>
+    <button class="tab-btn" role="tab">LangGraph — Python</button>
+    <button class="tab-btn" role="tab">Claude Agent SDK — TypeScript</button>
+    <button class="tab-btn" role="tab">Spring AI + LangGraph4j — Java</button>
+  </div>
+  <div class="tab-panel">
+<pre><code># The M00/M02 loop, recapped — see those modules for the full version
+while turn < MAX_TURNS:
+    resp = client.messages.create(model=MODEL, system=SYSTEM,
+                                   messages=history, tools=TOOLS)
+    if resp.stop_reason != "tool_use":
+        return resp
+    call = next(b for b in resp.content if b.type == "tool_use")
+    action = ProposedAction.model_validate(call.input)     # typed proposal boundary, M02 §2.3
+    result = TOOL_IMPL[action.tool](action.args)
+    history += [
+        {"role": "assistant", "content": resp.content},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": call.id, "content": result}
+        ]},
+    ]
+    turn += 1</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code># pip install langgraph langchain-anthropic
+from langgraph.graph import StateGraph, END, START
+from typing import TypedDict, Annotated
+import operator
+
+class LoopState(TypedDict):
+    messages: Annotated[list, operator.add]
+    turn: int
+
+def assistant(state: LoopState) -> LoopState:
+    resp = client.messages.create(model=MODEL, system=SYSTEM,
+                                   messages=state["messages"], tools=TOOLS)
+    return {"messages": [resp], "turn": state["turn"] + 1}
+
+def tools_node(state: LoopState) -> LoopState:
+    call = next(b for b in state["messages"][-1].content if b.type == "tool_use")
+    action = ProposedAction.model_validate(call.input)      # same boundary, framework-hosted
+    result = TOOL_IMPL[action.tool](action.args)
+    return {"messages": [{"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": call.id, "content": result}]}]}
+
+def route(state: LoopState) -> str:
+    return "tools" if state["messages"][-1].stop_reason == "tool_use" else END
+
+graph = StateGraph(LoopState)
+graph.add_node("assistant", assistant)
+graph.add_node("tools", tools_node)
+graph.add_edge(START, "assistant")
+graph.add_conditional_edges("assistant", route, {"tools": "tools", END: END})
+graph.add_edge("tools", "assistant")
+app = graph.compile()   # checkpointer + interrupt added in §5.4</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code>// npm install @anthropic-ai/claude-agent-sdk
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+for await (const message of query({
+  prompt: "Find every TODO under src/ and summarize the top 3.",
+  options: {
+    allowedTools: ["Read", "Grep"],
+    // hooks are the SDK's seam for the typed-proposal-boundary idea —
+    // a PreToolUse hook can inspect/reject a call before it runs (M02 §2.3)
+    hooks: { PreToolUse: [{ hooks: [validateAgainstSchema] }] },
+  },
+})) {
+  if (message.type === "result") console.log(message.result);
+}</code></pre>
+  </div>
+  <div class="tab-panel" hidden>
+<pre><code>// Spring AI's ChatClient wired as a LangGraph4j node
+var stateGraph = new StateGraph<>(AgentState.SCHEMA, AgentState::new)
+    .addNode("assistant", node_async(state -> {
+        ChatResponse resp = chatClient.prompt()
+            .messages(state.messages())
+            .tools(readFileTool, grepTool)
+            .call().chatResponse();
+        return Map.of("messages", List.of(resp));
+    }))
+    .addNode("tools", node_async(state -> {
+        ToolCall call = state.lastToolCall();
+        ProposedAction action = ProposedAction.validate(call.input()); // same boundary again
+        return Map.of("messages", List.of(TOOL_IMPL.get(action.tool()).apply(action.args())));
+    }))
+    .addEdge(START, "assistant")
+    .addConditionalEdges("assistant", AgentState::routeOrEnd,
+        Map.of("tools", "tools", END, END))
+    .addEdge("tools", "assistant");
+
+CompiledGraph<AgentState> app = stateGraph.compile();  // checkpointer added in §5.4</code></pre>
+  </div>
+</div>
+
+<p>Notice what's actually different: the no-framework version and the LangGraph version have <em>identical</em> tool-dispatch logic — the only thing LangGraph adds is a graph wrapper around the same two functions, which is exactly why it's a low-regret adoption for teams already comfortable with the loop shape. The Claude Agent SDK version is shorter because the loop itself is managed — you get hooks into it rather than owning it, which is a better trade when you want a coding-agent-shaped harness (Module 09) and a worse one when your control-flow needs don't match the SDK's assumptions. The Java version shows the same seam (a validated <code>ProposedAction</code> before <code>TOOL_IMPL</code> runs) surviving translation into a completely different ecosystem — which is the actual claim this module is making: the typed proposal boundary is a design decision, not a library feature, and it should survive every framework migration you ever do.</p>
+
+<h2><span class="sec">§ 5.4</span> Full-stack: porting loopbot to LangGraph with checkpointing, an approval gate, and a live UI</h2>
+<p>Picking up the graph from §5.3, here is the actual reason a team reaches for LangGraph specifically: durable checkpointing plus a first-class human-approval interrupt, wired all the way to a frontend that can act on it — not just watch it.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 400" role="img" aria-label="Full stack: LangGraph graph with a Postgres checkpointer runs assistant and tools nodes, interrupts before every tool call, streams node and interrupt events over SSE to an API layer, and a React approval card posts a resume decision back through a REST endpoint.">
+  <defs>
+    <marker id="f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="26" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME — LANGGRAPH</text>
+  <rect x="20" y="36" width="850" height="140" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="45" y="80" width="120" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="105" y="105" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">assistant</text>
+  <rect x="220" y="80" width="140" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="290" y="100" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">interrupt_before</text><text x="290" y="113" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">pauses here</text>
+  <rect x="415" y="80" width="110" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="470" y="105" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">tools</text>
+  <rect x="580" y="80" width="150" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="655" y="100" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">PostgresSaver</text><text x="655" y="113" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">checkpoint every node</text>
+  <line x1="165" y1="101" x2="215" y2="101" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#f2)"/>
+  <line x1="360" y1="101" x2="410" y2="101" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#f2)"/>
+  <path d="M470 122 L470 145 L105 145 L105 125" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#f2)"/>
+  <path d="M525 101 L575 101" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/>
+
+  <text x="20" y="200" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API + FRONTEND</text>
+  <rect x="20" y="210" width="850" height="170" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="60" y="250" width="260" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="190" y="270" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">GET /runs/:id/events</text><text x="190" y="285" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">SSE — node_status + interrupt events</text>
+  <rect x="440" y="250" width="260" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="570" y="270" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">&lt;ApprovalCard/&gt;</text><text x="570" y="285" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">shows the pending call, not a spinner</text>
+  <line x1="320" y1="273" x2="435" y2="273" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#f2)"/>
+  <rect x="60" y="320" width="260" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="190" y="340" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">POST /runs/:id/resume</text><text x="190" y="353" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">{"{"}approved: bool{"}"} → un-pauses the graph</text>
+  <line x1="570" y1="296" x2="570" y2="341" stroke="var(--accent)" stroke-width="1.2"/>
+  <line x1="570" y1="341" x2="325" y2="341" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#f2)"/>
+  <path d="M190 320 L190 190 L290 190 L290 128" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#f2)"/>
+  <text x="470" y="373" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">same run_id + checkpoint drive both SSE reads and the resume write — no drift between what's shown and what's paused</text>
+</svg>
+<figcaption><b>FIG 5.2</b> — The interrupt is the actual product here: the human sees the exact pending tool call, not a generic "waiting for approval," and the resume call re-enters the same checkpointed graph rather than restarting it.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  A[assistant] -->|interrupt_before| T[tools]
+  T --> A
+  A -. checkpoint .-> CP[(PostgresSaver)]
+  CP -. SSE .-> UI[ApprovalCard]
+  UI -->|POST /resume| CP</pre>
+</details>
+</figure>
+
+<h3>Layer 1 — agent runtime: checkpointed graph with an approval interrupt (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — LangGraph + Postgres checkpointer</button></div>
+  <div class="tab-panel">
+<pre><code># pip install langgraph langgraph-checkpoint-postgres
+from langgraph.checkpoint.postgres import PostgresSaver
+
+checkpointer = PostgresSaver.from_conn_string(DATABASE_URL)
+checkpointer.setup()   # creates the checkpoint tables once
+
+app = graph.compile(
+    checkpointer=checkpointer,
+    interrupt_before=["tools"],   # pause before every tool call — HITL, not optional
+)
+
+def start_run(run_id: str, goal: str):
+    config = {"configurable": {"thread_id": run_id}}
+    app.invoke({"messages": [{"role": "user", "content": goal}], "turn": 0}, config)
+    # execution is now paused at "tools" — the pending call is in app.get_state(config)
+
+def resume_run(run_id: str, approved: bool):
+    config = {"configurable": {"thread_id": run_id}}
+    if not approved:
+        app.update_state(config, {"messages": [{"role": "user", "content": "Tool call denied by reviewer."}]})
+        return
+    app.invoke(None, config)   # None input = resume from the checkpoint, not from scratch</code></pre>
+  </div>
+</div>
+
+<h3>Layer 2 — API/transport: SSE for state, REST for the decision (Python, FastAPI)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — FastAPI + sse-starlette</button></div>
+  <div class="tab-panel">
+<pre><code># pip install fastapi uvicorn sse-starlette
+from fastapi import FastAPI
+from sse_starlette.sse import EventSourceResponse
+from pydantic import BaseModel
+import json
+
+app_api = FastAPI()
+
+@app_api.get("/runs/{run_id}/events")
+async def run_events(run_id: str):
+    async def stream():
+        config = {"configurable": {"thread_id": run_id}}
+        state = app.get_state(config)
+        pending = state.tasks[0].interrupts if state.tasks else None
+        if pending:
+            yield {"event": "interrupt", "data": json.dumps({"pending_call": state.values["messages"][-1].content})}
+        else:
+            yield {"event": "complete", "data": json.dumps({"result": state.values["messages"][-1].content})}
+    return EventSourceResponse(stream())
+
+class ResumeDecision(BaseModel):
+    approved: bool
+
+@app_api.post("/runs/{run_id}/resume")
+def resume(run_id: str, decision: ResumeDecision):
+    resume_run(run_id, decision.approved)   # Layer 1's function — no re-derivation here
+    return {"status": "resumed", "approved": decision.approved}</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — frontend/UX: an approval card that acts, not just displays (TypeScript, React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React</button></div>
+  <div class="tab-panel">
+<pre><code>// npm install react
+import { useEffect, useState } from "react";
+
+export function ApprovalCard({ runId }: { runId: string }) {
+  const [pending, setPending] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  useEffect(() => {
+    const source = new EventSource(`/runs/${runId}/events`);
+    source.addEventListener("interrupt", (e) => {
+      setPending(JSON.parse((e as MessageEvent).data).pending_call);
+    });
+    source.addEventListener("complete", (e) => {
+      setDone(JSON.parse((e as MessageEvent).data).result);
+      source.close();
+    });
+    return () => source.close();
+  }, [runId]);
+
+  async function decide(approved: boolean) {
+    await fetch(`/runs/${runId}/resume`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved }),
+    });
+    setPending(null);   // optimistic clear; the next SSE event confirms it
+  }
+
+  if (done) return <p>Done: {done}</p>;
+  if (!pending) return <p>Running…</p>;
+  return (
+    <div role="alertdialog" aria-label="Approve pending tool call">
+      <pre>{pending}</pre>
+      <button onClick={() => decide(true)}>Approve</button>
+      <button onClick={() => decide(false)}>Deny</button>
+    </div>
+  );
+}</code></pre>
+  </div>
+</div>
+
+<p>The fourth layer — data/infra — is the checkpoint tables <code>PostgresSaver.setup()</code> creates: one row per (thread_id, checkpoint) pair holding the full graph state as JSON, so a killed API process and a browser tab that reloaded mid-approval both reconstruct the identical pending state from the same source of truth. This is the concrete difference between this module's approval flow and Module 01 §1.2's read-only <code>PlanChecklist</code>: that UI only ever displayed state a different system owned; this one's <code>ApprovalCard</code> is a legitimate write path into the agent's execution — which is exactly why the resume endpoint validates <code>approved</code> as a typed, narrow boolean rather than accepting free-form instructions back into the graph.</p>
+
+<div class="failure">
+<div class="hd">Failure modes — frameworks and migrations</div>
+<ol>
+  <li><strong>Checkpoint-format lock-in.</strong> A minor LangGraph upgrade changes the serialized shape of checkpointed state, and threads paused before the upgrade fail to resume. Symptom in the trace: <code>resume_run</code> raises a deserialization error only for <code>thread_id</code>s created before a specific deploy timestamp. Mitigation: version your state schema explicitly and write a migration step for in-flight checkpoints before any framework upgrade that touches state shape — treat it like a database migration, because it is one.</li>
+  <li><strong>The framework's control flow silently overrides your typed boundary.</strong> A conversational framework (AG2, CrewAI) coerces a malformed tool argument into "something plausible" instead of failing, because its internal message-passing assumes free-form text, not validated schemas. Symptom: an eval failure with no corresponding validation error anywhere in the logs — the framework accepted a bad shape you thought you'd guarded against. Mitigation: re-validate at the framework/tool boundary yourself; never assume a framework's internal parsing implements Module 01 §1.5's fail-closed rule the way your own code would.</li>
+  <li><strong>Hidden retries multiply cost without moving the accuracy needle.</strong> A framework's default node-level retry policy fires on a transient tool error, but the underlying tool is deterministic and the actual bug is upstream — so every retry reproduces the identical wrong call three times before surfacing. Symptom: token/cost dashboards show 3x spend on a task class with unchanged accuracy. Mitigation: know your framework's default retry policy before you ship it, and cap or disable it in favor of your own turn-cap logic (Module 00 §0.5) when a tool's failures are logic bugs, not flakiness.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — framework or no framework?</div>
+<p>Reach for a framework when at least two of the six axes in §5.1 are both genuinely needed <em>and</em> non-trivial to build correctly — durable checkpointing across process restarts and a real HITL interrupt are the pair that most often clears this bar, because both have sharp edges (partial writes, race conditions between a resume call and a still-running node) that a battle-tested implementation has already found for you. Stay with no framework when you need at most one axis, or when your control-flow shape is simple enough that a graph library's abstraction costs you more legibility than it returns — a straight-line ReAct loop wrapped in a graph node for its own sake is pure overhead.</p>
+<p>The tell in review: ask "which of these six capabilities would take my team more than a week to build correctly, including the edge cases?" If the honest answer is zero, you don't need a framework yet — you need to notice you're asking the question before the deadline, not after.</p>
+</aside>
+
+<h2><span class="sec">§ 5.5</span> Keeping any framework at arm's length</h2>
+<p>Whichever framework wins the axis comparison, the engineering move that actually protects you is the same one Module 02 argued for at the tool boundary: put your own interface between your business logic and the framework's API, so a framework swap touches one adapter module instead of every call site. Concretely, don't let <code>ProposedAction</code>, your tool implementations, or your eval harness (Module 11) import framework types directly — define them once, plain, and write a thin adapter per framework that maps its node/state/message shapes onto your types. It costs a day of ceremony up front. It's the difference between the "3 weeks, 60% of the codebase changed" migration story and a genuinely moderate one, because the 60% that had to change was business logic tangled with framework imports, not an adapter.</p>
+
+<h2><span class="sec">§ 5.6</span> Lab — port one workflow across two frameworks + no-framework; write the migration-cost memo</h2>
+<div class="block">
+<div class="hd">LAB 05 · Estimated 4–6 hours</div>
+<p><strong>Mission:</strong> take Module 00's <code>loopbot</code> (or your own §5.6-scale agent) and implement the identical task three ways — no framework (you likely already have this from Module 00), LangGraph with a Postgres checkpointer and an approval interrupt (§5.4), and one more framework of your choice from the §5.2 table that isn't LangGraph — then write a migration-cost memo grounded in what you actually measured, not vibes.</p>
+<p><strong>Spec:</strong></p>
+<ol>
+  <li>Confirm all three implementations pass the same 5-task eval you'd use from Module 11 — correctness first, comparison second.</li>
+  <li>For the LangGraph version, wire §5.4's full stack end to end: start a run, watch the SSE stream show an <code>interrupt</code> event with the actual pending tool call, and confirm <code>POST /resume</code> with <code>approved: false</code> denies it without crashing the process.</li>
+  <li>Kill the API process mid-run (after a checkpoint, before resume) and restart it. Confirm <code>GET /runs/:id/events</code> reconstructs the same pending interrupt from Postgres rather than losing the run.</li>
+  <li>Port the <em>identical</em> task into your third framework choice. Count concretely: lines of business logic that had to change (not just syntax), and any of the six §5.1 axes your third framework simply doesn't offer that you had to build yourself anyway.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+  <li>✅ <code>curl -N http://localhost:8000/runs/todo-review/events</code> streams an <code>interrupt</code> event containing the real pending tool call as JSON, not a placeholder string.</li>
+  <li>✅ A killed-and-restarted process resumes the same paused run — captured as a before/after log or screenshot.</li>
+  <li>✅ A migration-cost memo (1 page) stating: total lines changed per framework switch, which of the six axes each framework covers vs. leaves to you, and a recommendation with the reasoning made explicit — not "framework X felt cleaner."</li>
+  <li>✅ At least one induced failure per framework, captured in the transcript: force the LangGraph checkpoint-version mismatch (§5's first failure mode) by intentionally changing your state schema between two checkpointed runs, and force your third framework's weakest axis to fail visibly (e.g., kill a CrewAI run mid-task and observe there's no resume path).</li>
+</ul>
+<p><strong>Stretch:</strong> build the §5.5 adapter layer first, then re-measure the third-framework port's line count. Does the adapter pay for itself on a single migration, or only across multiple ones?</p>
+</div>
+
+<h2><span class="sec">§ 5.7</span> Consultant's checklist</h2>
+<div class="block">
+<div class="hd">Questions to ask any team choosing (or defending) a framework</div>
+<ul>
+  <li>Which of the six §5.1 axes does this team actually need in the next two quarters — and which are they adopting "just in case"?</li>
+  <li>Is there an adapter layer between business logic and the framework's types, or does a framework swap today mean touching every call site?</li>
+  <li>What is the framework's default retry/error policy, and has anyone read it, or is it running as shipped?</li>
+  <li>For any HITL interrupt: does the human reviewer see the actual pending action, or a generic "approval needed" with no specifics — the difference between a real gate and rubber-stamping (Pillar 9's approval-UX territory)?</li>
+  <li>If this framework were deprecated tomorrow, what's the honest estimate of the rewrite — and does it match the 50–80% figures teams have reported migrating off CrewAI, or is this team's state genuinely more portable?</li>
+  <li>Is the chosen framework's typed-I/O story strong enough to carry Module 01 §1.5's fail-closed verification rule, or does the team believe it is and never checked?</li>
+</ul>
+</div>
+
+<h2><span class="sec">§ 5.8</span> Design-review questions (staff+)</h2>
+<div class="block">
+<div class="hd">Interview / design-review bank</div>
+<ol>
+  <li><strong>A team wants to migrate from CrewAI to LangGraph because "CrewAI can't checkpoint." What do you ask before approving the migration?</strong> <em>Strong answers ask which specific axis is actually blocking them (checkpointing, most likely, per §5.2), whether an adapter layer exists to bound the blast radius, and whether the team has measured what fraction of their current code is business logic vs. CrewAI-specific role/crew wiring — since that ratio predicts whether this is a 3-week or 3-month project.</em></li>
+  <li><strong>Your org standardized on the Claude Agent SDK for coding agents. A new team wants to build a customer-support agent on it too. Approve or push back?</strong> <em>Strong answers separate "same vendor, different shape": a coding agent's hook-based lifecycle and a support agent's typed-escalation-boundary needs (Module 14) are different axis priorities — provider-native lock-in is fine when the provider's model is genuinely the right one for both use cases, but the SDK choice shouldn't be assumed to transfer just because it worked once.</em></li>
+  <li><strong>A framework upgrade silently changed checkpoint serialization and broke resume for in-flight runs. How do you prevent a recurrence?</strong> <em>Strong answers propose versioning the state schema explicitly, writing a migration path (or a compatibility shim) as part of any framework version bump that touches state, and adding a canary check — resume a known paused thread — to the upgrade's release checklist, not just a green test suite.</em></li>
+  <li><strong>Argue both sides: "No framework is always the right starting point; frameworks are for teams that already know exactly what they need."</strong> <em>Strong answers concede the no-framework default is right for exploration and for teams under two axes of real need, then push back that "know exactly what you need" is a luxury — teams under real deadline pressure sometimes correctly buy a framework's opinions to avoid building and hardening checkpointing themselves, and the actual skill is naming the tradeoff, not avoiding it.</em></li>
+  <li><strong>Design the decision process for choosing a framework across Python, TypeScript, and Java teams in the same org.</strong> <em>Strong answers resist forcing one framework across all three ecosystems — LangGraph/PydanticAI for Python, Mastra or the Claude Agent SDK's TS bindings for TypeScript, Spring AI + LangGraph4j for Java — and instead standardize the adapter-layer contract (§5.5) and the typed-I/O expectations, so the six axes are met consistently even though the library isn't the same across languages.</em></li>
+</ol>
+</div>
+
+<h2><span class="sec">§ 5.9</span> Go deeper</h2>
+<ul>
+  <li><a href="https://langchain-ai.github.io/langgraph/">LangGraph documentation</a> — graph construction, checkpointers, and the <code>interrupt()</code>/<code>interrupt_before</code> human-in-the-loop primitives used in §5.4.</li>
+  <li><a href="https://langgraph4j.github.io/langgraph4j/">LangGraph4j documentation</a> — the JVM port of the same graph model, including Spring AI integration and <code>CompileConfig</code> interrupt options used in §5.3's Java tab.</li>
+  <li><a href="https://ai.pydantic.dev/">PydanticAI documentation</a> — the type-first framework referenced throughout the comparison table (§5.2) and Module 01 §1.5's typed-boundary code.</li>
+  <li><a href="https://docs.claude.com/en/api/agent-sdk/overview">Claude Agent SDK documentation</a> — the hook lifecycle (<code>PreToolUse</code>/<code>PostToolUse</code>) shown in §5.3's TypeScript tab; verify current hook names and session-persistence guidance here, as this surface is under active development.</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-14 · Volatile surfaces: every framework's version number, exact API names (LangGraph's checkpointer classes, the Claude Agent SDK's hook set, OpenAI Agents SDK's session-snapshot API), and the CrewAI/AG2 migration-cost figures cited in §5.5 (drawn from teams' reported experience, not a controlled study) — verify against current docs and your own measurements before committing to a decision. The six-axis framework and the "keep it at arm's length" adapter pattern are stable.</p>
+
+<nav class="pager">
+  <a href="module-04.html">← MODULE 04 — CONTEXT ENGINEERING</a>
+  <span class="disabled">NEXT: MODULE 06 — TOOLS &amp; DATA SOURCE INTEGRATION (QUEUED)</span>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
