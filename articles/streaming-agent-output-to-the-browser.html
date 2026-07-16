@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Streaming Agent Output to the Browser: SSE, WebSockets, and the Reconnect Problem · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Streaming Agent Output to the Browser: SSE, WebSockets, and the Reconnect Problem
+  slug: streaming-agent-output-to-the-browser
+  pillar: Pillar 9 — Full-Stack Agentic Engineering
+  difficulty: Practitioner
+  series: Full-Stack Agentic Engineering (article 1 of an open series)
+  tags: sse, websockets, streaming, redis-streams, reconnect, agent-runtime
+  meta description: How to stream an agent's tokens and tool calls to a browser without losing or duplicating events across a reconnect — SSE vs WebSockets, a Redis Streams-backed resume protocol, and the failure modes that show up in production.
+  read time: ~9 min (~1,750 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · FULL-STACK AGENTIC ENGINEERING</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 9 · Full-Stack Agentic Engineering</div>
+  <h1>Streaming Agent Output to the Browser: SSE, WebSockets, and the Reconnect Problem</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Getting tokens on screen fast is the easy 80%. The other 20% — surviving a dropped wifi connection without duplicating or losing part of the transcript — is where most agent chat products actually break in production.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-16</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~9 min (~1,750 words)</b></span>
+    <span>LAB <b>reconnect a live SSE stream without dropping or duplicating a token</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A support ticket comes in: "the assistant froze for 25 seconds, then the whole answer appeared at once, garbled." Your local testing shows tokens streaming smoothly, one every 20&ndash;40ms. The difference is the customer's corporate network sits behind a proxy that buffers HTTP responses until it sees a full chunk worth flushing — your token stream arrives at the proxy in near-real-time and leaves it in bursts. A second ticket, same day: a user's laptop sleeps mid-generation, wifi drops for three seconds, and when it reconnects the transcript shows a sentence twice, followed by a gap where a tool call's result should be. Neither bug is in your agent. Both are in the transport layer nobody designed on purpose.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>Before token-level streaming was standard, agent and chatbot UIs had two options, both bad in the same way: block until the full response was ready and show a spinner, or poll a status endpoint every second or two asking "done yet?" Blocking full-response UIs make time-to-first-token indistinguishable from time-to-last-token — a 12-second agent turn with three tool calls looks identical to the user whether it's about to fail or about to succeed, and there's no way to show intermediate tool-call progress. Polling fixes the visibility problem but multiplies request volume by however many clients are waiting, forces you to persist and diff state on every poll, and still has visible latency jitter bounded by your poll interval.</p>
+<p>Streaming protocols — Server-Sent Events (SSE) and WebSockets — collapse both problems: the server pushes each token, tool call, and status change to the client as it happens, over one long-lived connection instead of N repeated ones. That part is well understood by 2026. What's still routinely under-built is what happens when that one long-lived connection dies mid-turn — which, at any real scale, it will, constantly: mobile networks hand off, laptops sleep, corporate VPNs cycle, load balancers recycle idle connections. A streaming design that only works on the happy path isn't a streaming design; it's a demo.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>The mechanism has four moving parts across the stack, and the object that ties them together is a single typed event — <code>{id, type: 'token' | 'tool_call' | 'done', payload}</code> — with a monotonically increasing <code>id</code> per session. That <code>id</code> is the entire reconnect story: everything below exists to let a client say "resume after event 482" and get exactly the events it missed, no more, no fewer.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 340" role="img" aria-label="Streaming pipeline: agent runtime publishes typed events to a Redis stream, the API layer tails that stream over SSE honoring Last-Event-ID, and the browser's EventSource reconnects with the last seen id after a network drop.">
+  <defs>
+    <marker id="sa1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="26" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME + DATA LAYER</text>
+  <rect x="20" y="36" width="850" height="110" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="50" y="70" width="150" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="125" y="90" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">Agent loop</text><text x="125" y="104" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">tokens + tool calls</text>
+  <rect x="270" y="70" width="180" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="360" y="90" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">Redis Stream</text><text x="360" y="104" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">XADD session:42 → auto-id</text>
+  <rect x="530" y="70" width="180" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="4 3"/><text x="620" y="90" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">Durable buffer</text><text x="620" y="104" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">events survive past the socket</text>
+  <line x1="200" y1="93" x2="265" y2="93" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#sa1)"/>
+  <line x1="450" y1="93" x2="525" y2="93" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#sa1)"/>
+
+  <text x="20" y="178" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="188" width="850" height="70" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="60" y="205" width="330" height="38" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="225" y="228" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">GET /sessions/42/stream (SSE, honors Last-Event-ID)</text>
+  <path d="M360 116 L360 155 L225 155 L225 200" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#sa1)"/>
+
+  <text x="20" y="292" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">BROWSER / FRONTEND</text>
+  <rect x="20" y="302" width="850" height="30" rx="6" fill="none" stroke="var(--border)" stroke-width="1.2"/>
+  <rect x="480" y="205" width="330" height="38" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="645" y="228" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">EventSource — on drop, retry with lastId</text>
+  <line x1="390" y1="224" x2="475" y2="224" stroke="var(--accent)" stroke-width="1.3" marker-end="url(#sa1)"/>
+  <path d="M645 243 L645 280 L440 280 L440 305" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#sa1)"/>
+  <text x="440" y="322" text-anchor="middle" class="svg-label" font-size="9" fill="var(--warn)">network drop mid-stream → browser reconnects with Last-Event-ID: 482, no duplicate/gap</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — The event's <code>id</code> is produced once, by the Redis Stream, and travels unchanged through the SSE endpoint into the browser's reconnect header. Nothing re-derives it.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart LR
+  A[Agent loop] -->|token/tool_call events| R[(Redis Stream session:42)]
+  R --> S[GET /sessions/42/stream — SSE]
+  S -->|text/event-stream, id: N| B[Browser EventSource]
+  B -. drop + reconnect w/ Last-Event-ID .-> S</pre>
+</details>
+</figure>
+
+<h3>Layer 1 — agent runtime: publish events into a durable, resumable stream (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — redis-py</button></div>
+  <div class="tab-panel">
+<pre><code># pip install redis anthropic
+import redis, json
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+def publish_event(session_id: str, event_type: str, payload: dict) -> str:
+    """Append one event; Redis assigns a monotonic stream id we never invent ourselves."""
+    stream_key = f"session:{session_id}:events"
+    entry_id = r.xadd(stream_key, {"type": event_type, "payload": json.dumps(payload)})
+    r.expire(stream_key, 3600)  # bound retention — see failure mode 3 below
+    return entry_id
+
+def run_turn(session_id: str, user_message: str):
+    with anthropic_client.messages.stream(
+        model="claude-sonnet-5",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": user_message}],
+    ) as stream:
+        for event in stream:
+            if event.type == "content_block_delta" and event.delta.type == "text_delta":
+                publish_event(session_id, "token", {"text": event.delta.text})
+            elif event.type == "content_block_start" and event.content_block.type == "tool_use":
+                publish_event(session_id, "tool_call", {"name": event.content_block.name})
+    publish_event(session_id, "done", {})
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 2 — API/transport: SSE endpoint that resumes from Last-Event-ID (Node/Express)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — Express + ioredis</button></div>
+  <div class="tab-panel">
+<pre><code>// npm install express ioredis
+import express from "express";
+import Redis from "ioredis";
+
+const app = express();
+const redis = new Redis();
+
+app.get("/sessions/:id/stream", async (req, res) => {
+  const streamKey = `session:${req.params.id}:events`;
+  // Prefer the header (native reconnect); fall back to a query param for the
+  // first manual connect. "0" means "from the beginning of what's buffered."
+  let lastId = (req.header("Last-Event-ID") ?? (req.query.lastId as string) ?? "0") as string;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // tell nginx/most proxies: don't buffer this route
+  res.flushHeaders();
+
+  req.on("close", () => { closed = true; });
+  let closed = false;
+
+  while (!closed) {
+    // Blocking read: wait up to 15s for new entries after lastId, replaying
+    // anything the client missed before falling through to a live tail.
+    const results = await redis.xread("BLOCK", 15000, "STREAMS", streamKey, lastId);
+    if (!results) continue; // timeout, no new events — loop (keeps connection alive)
+    const [, entries] = results[0];
+    for (const [id, fields] of entries) {
+      const [, type, , payloadJson] = fields;
+      res.write(`id: ${id}\nevent: ${type}\ndata: ${payloadJson}\n\n`);
+      lastId = id;
+      if (type === "done") { closed = true; break; }
+    }
+  }
+  res.end();
+});
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — frontend: EventSource with typed reconnect (TypeScript/React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React hook</button></div>
+  <div class="tab-panel">
+<pre><code>type AgentEvent =
+  | { type: "token"; payload: { text: string } }
+  | { type: "tool_call"; payload: { name: string } }
+  | { type: "done"; payload: Record&lt;string, never&gt; };
+
+function useAgentStream(sessionId: string) {
+  const [transcript, setTranscript] = useState("");
+  const [status, setStatus] = useState&lt;"connecting" | "streaming" | "done" | "reconnecting"&gt;("connecting");
+  const lastIdRef = useRef&lt;string&gt;("0");
+
+  useEffect(() =&gt; {
+    let source: EventSource;
+    let retryDelay = 500; // exponential backoff, capped below
+
+    function connect() {
+      // Native EventSource replays Last-Event-ID automatically on its own
+      // reconnect; we also pass it explicitly on the very first connect.
+      source = new EventSource(`/sessions/${sessionId}/stream?lastId=${lastIdRef.current}`);
+      setStatus((s) =&gt; (s === "connecting" ? "streaming" : "reconnecting"));
+
+      source.addEventListener("token", (e: MessageEvent) =&gt; {
+        lastIdRef.current = e.lastEventId;
+        const { text } = JSON.parse(e.data) as AgentEvent["payload"] & { text: string };
+        setTranscript((t) =&gt; t + text);
+        retryDelay = 500; // reset backoff on any successful event
+      });
+      source.addEventListener("tool_call", (e: MessageEvent) =&gt; {
+        lastIdRef.current = e.lastEventId;
+        setTranscript((t) =&gt; t + `\n[tool: ${JSON.parse(e.data).name}]\n`);
+      });
+      source.addEventListener("done", () =&gt; {
+        setStatus("done");
+        source.close();
+      });
+      source.onerror = () =&gt; {
+        source.close();
+        setStatus("reconnecting");
+        setTimeout(connect, Math.min(retryDelay *= 2, 8000)); // capped exponential backoff
+      };
+    }
+    connect();
+    return () =&gt; source?.close();
+  }, [sessionId]);
+
+  return { transcript, status };
+}
+</code></pre>
+  </div>
+</div>
+<p>Trace the object across layers: the Redis Stream assigns <code>entry_id</code> once (Layer 1); the SSE endpoint forwards it verbatim as the <code>id:</code> field (Layer 2); the browser's <code>EventSource</code> reads it as <code>e.lastEventId</code> and replays it as <code>Last-Event-ID</code> on reconnect (Layer 3). No layer re-derives or guesses the id — that's the whole trick, and it's also the whole failure surface if any layer breaks the chain.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>Proxy buffering turns a stream into a burst.</strong> Symptom: local dev streams smoothly, but behind a corporate proxy or a misconfigured nginx (<code>proxy_buffering on</code>) or when gzip compression is applied to the route, tokens arrive in one or two large bursts instead of continuously — the trace shows the agent runtime writing at 30ms intervals while the client-observed timestamps cluster at connection-open and connection-drain. Fix: disable buffering and compression specifically on the streaming route (<code>X-Accel-Buffering: no</code>, exclude the path from gzip), and confirm with a raw <code>curl -N</code> against production, not just localhost.</li>
+<li><strong>Reconnect without replay loses or duplicates events.</strong> Symptom: after any network blip, the transcript has a silent gap (events published during the gap were never delivered because the new connection started a fresh tail instead of resuming) or a duplicated sentence (the client re-rendered from scratch instead of appending from <code>Last-Event-ID</code>). This is what happens when a team ships SSE without the Redis Stream (or equivalent durable buffer) behind it — the events only ever exist in the socket, so once the socket closes, they're gone, and "resume" is a UI feature with no backing data.</li>
+<li><strong>Backpressure from slow clients grows the agent runtime's memory.</strong> Symptom: a backgrounded mobile tab stops reading its SSE connection, but the server keeps generating and buffering events for it; multiply by thousands of idle tabs and worker RSS climbs until the process is OOM-killed. The Redis Stream absorbs this for *reconnect* (bounded by your <code>XTRIM</code>/expiry policy) but does not absorb it for a live, open-but-stalled connection unless your API layer's write loop itself yields or times out slow consumers — the fix is a write deadline per connection, not more memory.</li>
+<li><strong>WebSocket sticky-session mismatch after a deploy or scale-down.</strong> Symptom: a client reconnects and the load balancer routes it to a different pod that never held that session's in-memory state; the connection opens, then errors on the first message because there's no local WebSocket-specific session to resume against. SSE sidesteps this by design if the durable state lives in Redis rather than in-process — any pod can serve the resume because the state isn't pinned to the one that opened the original connection.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — SSE vs. WebSockets</div>
+<p>Reach for SSE when the traffic is fundamentally one-directional (server pushes tokens, tool status, progress) and you want to inherit ordinary HTTP semantics for free: auth cookies just work, HTTP/2 multiplexes it cheaply, and every proxy, CDN, and load balancer in your stack already understands "long-lived GET response" without special-casing a new protocol. Reach for WebSockets when you need genuinely low-latency client-to-server signals inside the same connection — a mid-generation cancel that must land in milliseconds, multi-user presence, or multiplexing many independent logical channels over one socket where opening N SSE connections would be wasteful.</p>
+<p>For most agent chat products, the pragmatic shape is SSE for output plus a plain <code>POST /sessions/:id/cancel</code> for interrupt — it's simpler to operate, easier to debug with <code>curl</code>, and doesn't require you to reinvent reconnect semantics that HTTP already gives you. Don't reach for WebSockets because streaming "feels more real-time"; reach for it only once you've hit a concrete limit SSE can't clear, like sub-100ms bidirectional turn-taking.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> stand up the three layers above against a local Redis, then prove the reconnect path actually works — not just the happy path.</p>
+<ol>
+<li>Run <code>redis-server</code> locally. Implement <code>publish_event</code> from Layer 1 as a standalone script that pushes 10 fake <code>token</code> events one per second into <code>session:demo:events</code>, followed by a <code>done</code> event.</li>
+<li>Implement the Express endpoint from Layer 2 exactly as shown, pointed at that stream key.</li>
+<li>In one terminal: <code>curl -N "http://localhost:3000/sessions/demo/stream"</code> and watch events arrive roughly once per second with visible <code>id:</code> lines.</li>
+<li>Re-run the publisher script, then mid-stream (after ~4 events), kill the <code>curl</code> with Ctrl-C, note the last <code>id:</code> printed, and reissue: <code>curl -N -H "Last-Event-ID: &lt;that id&gt;" "http://localhost:3000/sessions/demo/stream"</code>.</li>
+<li>Wire the React hook from Layer 3 to the same endpoint and confirm the transcript renders live and survives a manual Wi-Fi toggle without a gap or duplicate.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ The first <code>curl -N</code> shows events arriving incrementally, not in one burst.</li>
+<li>✅ The reconnected <code>curl</code> with <code>Last-Event-ID</code> resumes from the next event after the one you last saw — no repeated event, no skipped one.</li>
+<li>✅ Toggling Wi-Fi in the browser mid-stream produces a visible "reconnecting" status in the UI and the transcript continues without a duplicated sentence.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>Your agent chat product needs to support a user cancelling generation mid-turn, and product wants it to feel instant. You're on SSE for output. How do you add cancellation, and does it change your transport choice?</strong></p>
+<p><em>Strong answer sketch: cancellation is client-to-server, which SSE doesn't carry — but that doesn't require switching transports, because SSE and the interrupt channel don't have to be the same connection. Add a plain <code>POST /sessions/:id/cancel</code> that sets a cancellation flag (e.g. a Redis key with a short TTL) the agent runtime's generation loop checks between tokens/tool calls; the SSE stream simply stops emitting once the loop observes the flag and publishes a final <code>cancelled</code> event so the UI can distinguish "cancelled" from "errored" from "completed." The only latency cost is the polling granularity of the runtime's cancellation check (checking once per token is effectively instant; checking once per tool call adds up to one tool's latency). This resolves the "feels instant" requirement without WebSockets, and it keeps the resume protocol from §3 completely unaffected — cancellation is just another event type in the same stream, with its own id, so a reconnecting client sees it like any other event. Switching the whole output channel to WebSockets to get a cancel button is treating a one-bit signal as if it required a bidirectional protocol; it doesn't.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://html.spec.whatwg.org/multipage/server-sent-events.html">WHATWG HTML spec — Server-Sent Events</a> (the authoritative definition of <code>EventSource</code>, event framing, and reconnect/<code>Last-Event-ID</code> behavior this article relies on)</li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">MDN — Using server-sent events</a> (practical framing rules and browser reconnect defaults)</li>
+<li><a href="https://redis.io/docs/latest/develop/data-types/streams/">Redis docs — Streams</a> (<code>XADD</code>/<code>XREAD</code> semantics, consumer groups, and trimming/retention used as the durable buffer in §3)</li>
+<li><a href="https://datatracker.ietf.org/doc/html/rfc6455">RFC 6455 — The WebSocket Protocol</a> (for the §4 judgment call's alternative; note it has no built-in resume/replay semantics — you'd build §3's id-and-replay scheme yourself)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-16 · Stable: the SSE wire format and <code>Last-Event-ID</code> reconnect mechanics have been unchanged since the spec's original publication and are not expected to move. Verify before shipping: native <code>EventSource</code> cannot set custom request headers (no bearer-token auth on the initial connect) — most production setups pass the session/auth token as a signed query parameter or rely on same-site cookies, and any fetch-based SSE polyfill you adopt for header support should be checked against its current maintenance status.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: the API layer for agents (idempotency keys, request/session correlation), human-approval UIs that consume this same event stream to render a diff before acting, and building an agent chat UI from scratch (token rendering, tool-call cards, error states) — all open items in the Pillar 9 backlog.</p>
+
+<nav class="pager">
+  <a href="index.html">← ALL ARTICLES</a>
+  <span class="disabled">NEXT ARTICLE — QUEUED</span>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
