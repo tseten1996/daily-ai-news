@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Daily AI News — Articles</title>
+<style>
+  :root {
+    --paper: #f4f3ee; --grid: rgba(30, 60, 110, .055); --ink: #1b2430; --muted: #5d6674;
+    --accent: #0e63d0; --accent-soft: rgba(14, 99, 208, .09); --panel: #ffffff; --border: #d8d6cc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420; --grid: rgba(120, 170, 255, .06); --ink: #dfe6ef; --muted: #8b95a5;
+      --accent: #58a2f5; --accent-soft: rgba(88, 162, 245, .12); --panel: #131c2b; --border: #263349;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background-color: var(--paper);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px; color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif; line-height: 1.6;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink); text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+  header.site { padding: 2.2rem 0 1rem; }
+  header.site h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.3rem); letter-spacing: -.02em; margin: 0 0 .6rem;
+  }
+  header.site p { color: var(--muted); max-width: 62ch; margin: 0; }
+  .card {
+    display: block; margin: 1.4rem 0; padding: 1.3rem 1.5rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    text-decoration: none; color: var(--ink);
+  }
+  .card:hover { border-color: var(--accent); }
+  .card .kicker {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .72rem;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-weight: 700;
+  }
+  .card h2 { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 1.15rem; margin: .4rem 0 .4rem; }
+  .card p { margin: 0; color: var(--muted); font-size: .92rem; }
+  .card .meta { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .7rem; color: var(--muted); margin-top: .6rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="topbar">
+  <a href="../index.html">← Trends Board</a>
+  <span>THE DAILY AI NEWS · ARTICLES</span>
+  <a href="../manual/index.html">Field Manual</a>
+</nav>
+<header class="site">
+  <h1>Articles</h1>
+  <p>Full-stack agentic engineering, one production-grade article at a time — pillar-organized, no repeats, mechanism-level depth every time. Own the system from the browser to the model to the database.</p>
+</header>
+
+<a class="card" href="streaming-agent-output-to-the-browser.html">
+  <span class="kicker">Pillar 9 · Full-Stack Agentic Engineering · Practitioner</span>
+  <h2>Streaming Agent Output to the Browser: SSE, WebSockets, and the Reconnect Problem</h2>
+  <p>How to stream an agent's tokens and tool calls to a browser without losing or duplicating events across a reconnect — SSE vs. WebSockets, a Redis Streams-backed resume protocol, and the failure modes that actually show up in production.</p>
+  <div class="meta">PUBLISHED 2026-07-16 · ~9 MIN READ</div>
+</a>
+
+</div>
+</body>
+</html>
