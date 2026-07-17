@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tool Design as API Design: The Contract Your Agent's Tools Can't Skip · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Tool Design as API Design: The Contract Your Agent's Tools Can't Skip
+  slug: tool-design-as-api-design
+  pillar: Pillar 5 — Data & Integration
+  difficulty: Practitioner
+  series: none (standalone; sets up future Pillar 4 tool-description and MCP-security articles)
+  tags: tool-design, api-contracts, idempotency, error-taxonomy, agent-runtime, mcp-tools
+  meta description: Why an agent's tools need the same contract discipline as a public API — idempotency keys, versioned schemas, and a retryable/terminal error taxonomy — and the production failures (double refunds, retry storms, silent schema drift) that show up when they don't.
+  read time: ~10 min (~1,950 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · DATA &amp; INTEGRATION</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 5 · Data &amp; Integration</div>
+  <h1>Tool Design as API Design: The Contract Your Agent's Tools Can't Skip</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">A tool function with a JSON schema bolted on is not an API. The moment something between the model and that function is allowed to retry — and in production, something always is — every side effect the tool performs needs the same contract a payments API has needed for a decade.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-17</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~10 min (~1,950 words)</b></span>
+    <span>LAB <b>enforce idempotent tool calls end-to-end and prove it with curl</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>At 2:14am an on-call engineer gets paged: a customer was refunded $340 twice for one order. The support transcript shows a single <code>refund_order</code> tool call. The payments ledger shows two separate reversals, six seconds apart. The trace — instrumented last quarter, see <a href="opentelemetry-for-agents-full-stack-tracing.html">OpenTelemetry for Agents</a> — finally earns its keep: two <code>execute_tool refund_order</code> spans, same <code>order_id</code>, same <code>amount</code>, two different <code>tool_call_id</code>s. The orchestrator's HTTP client timed out waiting on the first call and silently retried it. The refund tool — a five-line Python function wrapping a payments SDK call — had no way to know the second request wasn't a brand-new refund. It did exactly what it was told, twice, because nothing had ever told it not to.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>Public APIs learned this lesson the expensive way, over roughly a decade. Early payment APIs double-charged customers whenever a client's network request succeeded on the server but the response never made it back, so the client — reasonably — retried. Stripe standardized the fix around 2012: every state-changing request carries an <code>Idempotency-Key</code> header, the server records the outcome of the first request under that key, and any retry with the same key gets the original response replayed instead of executed again. Google's API guidelines later generalized the same pattern as a <code>request_id</code> field (<a href="https://google.aip.dev/155">AIP-155</a>) so it would work uniformly across REST and RPC. Alongside idempotency, mature APIs settled on versioned schemas so a breaking field change doesn't silently break every existing client, and structured error taxonomies — HTTP status codes, or a typed error field — so a caller could tell a transient failure worth retrying from a permanent one that isn't.</p>
+<p>Agent tool integrations skipped all of it. A tool started life as a Python function decorated with a JSON schema and wired directly into the model's function-calling loop — no idempotency key, no version field, no distinction between "retry me" and "never retry me," because in a demo nothing fails halfway through. Then production reliability work arrived: a retrying HTTP client between the model and the tool (raw model calls time out sometimes), a self-correction loop that lets the model reissue a malformed call, an orchestrator that resumes a crashed run from its last completed step. Each of those is a correct reliability decision on its own. Stacked on a tool with no contract, together they reintroduce the exact double-execution bug the API world already spent ten years fixing — the tool function just never got the memo.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>Treat every tool with a side effect as a versioned API endpoint the model happens to call through a function-calling interface instead of curl. That means four ingredients, spread across four layers: a caller-supplied idempotency key that survives retries unchanged, a server that atomically claims that key before doing any work, a typed error shape that separates retryable from terminal failures, and — for anything with real blast radius — a human approval step that is itself idempotent, so a double-click doesn't approve twice.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 460" role="img" aria-label="Flow: agent runtime proposes a tool call with an idempotency key; high blast-radius calls route through a frontend approval surface; the API layer claims the key in a database table before executing; a replayed key returns the cached response instead of re-executing.">
+  <defs>
+    <marker id="ta2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="32" width="330" height="44" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="185" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">propose refund_order(order_id, amount)</text><text x="185" y="67" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">harness mints idempotency_key once, reused on every retry</text>
+
+  <text x="20" y="116" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="20" y="124" width="330" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="185" y="145" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">blast-radius approval (amount &gt; $200)</text><text x="185" y="158" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">approve button itself keyed + disabled after click</text>
+  <path d="M185 76 L185 118" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta2)"/>
+
+  <text x="20" y="206" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="214" width="380" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="235" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">POST /tools/refund_order — Idempotency-Key header</text><text x="210" y="248" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">rejects requests missing the header</text>
+  <path d="M185 166 L185 208" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta2)"/>
+
+  <text x="20" y="296" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER</text>
+  <rect x="20" y="304" width="180" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="110" y="324" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">INSERT ... ON CONFLICT</text><text x="110" y="337" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">claims key atomically</text>
+  <path d="M210 256 L110 256 L110 298" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta2)"/>
+
+  <rect x="220" y="304" width="180" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="310" y="324" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">key already seen?</text><text x="310" y="337" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">yes → replay cached row</text>
+  <path d="M200 327 L216 327" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta2)"/>
+
+  <rect x="120" y="382" width="180" height="46" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/><text x="210" y="402" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">no → execute payment SDK call</text><text x="210" y="415" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">write result, mark row complete</text>
+  <path d="M310 350 L310 366 L210 366 L210 378" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#ta2)"/>
+
+  <text x="450" y="216" class="svg-label" font-size="9" fill="var(--muted)">Replayed responses never</text>
+  <text x="450" y="230" class="svg-label" font-size="9" fill="var(--muted)">reach the payment SDK —</text>
+  <text x="450" y="244" class="svg-label" font-size="9" fill="var(--muted)">the unique constraint on</text>
+  <text x="450" y="258" class="svg-label" font-size="9" fill="var(--muted)">the key column is what</text>
+  <text x="450" y="272" class="svg-label" font-size="9" fill="var(--muted)">makes the claim atomic.</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — Four layers, one idempotency key, minted once by the runtime and never regenerated across a retry. The database's unique constraint — not application logic — is what makes the "have I seen this key" check race-free under concurrent retries.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["agent runtime: propose refund_order()<br/>mint idempotency_key once"] --> B["frontend: blast-radius approval<br/>(amount > $200)"]
+  B --> C["API layer: POST /tools/refund_order<br/>Idempotency-Key header required"]
+  C --> D["DB: INSERT ... ON CONFLICT<br/>claims key atomically"]
+  D -->|key already seen| E["replay cached response"]
+  D -->|new key| F["execute payment SDK call<br/>write result, mark row complete"]</pre>
+</details>
+</figure>
+
+<h3>Layer 3 — agent runtime: a key that survives retries (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — harness-owned key generation</button></div>
+  <div class="tab-panel">
+<pre><code># The harness, not the model, owns the key — see the design-review
+# question in §7 for why that boundary matters.
+import hashlib
+
+def idempotency_key_for(session_id: str, plan_step_id: str) -> str:
+    # Deterministic: the SAME (session, step) always yields the SAME key,
+    # even across process restarts, so a resumed run reuses it correctly.
+    raw = f"{session_id}:{plan_step_id}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+def call_tool_with_retry(tool_name, args, session_id, plan_step_id, max_attempts=3):
+    key = idempotency_key_for(session_id, plan_step_id)  # minted ONCE
+    last_err = None
+    for attempt in range(max_attempts):
+        try:
+            return http_post(
+                f"/tools/{tool_name}",
+                json=args,
+                headers={"Idempotency-Key": key},  # SAME key every attempt
+                timeout=5,
+            )
+        except TimeoutError as e:
+            last_err = e
+            continue  # safe: the server will replay, not re-execute
+    raise last_err
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 2 &amp; 4 — API + data: claiming the key atomically (Node/Express + Postgres)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — Express endpoint over Postgres</button></div>
+  <div class="tab-panel">
+<pre><code>// CREATE TABLE idempotency_keys (
+//   key TEXT PRIMARY KEY,
+//   status TEXT NOT NULL DEFAULT 'processing',   -- processing | complete
+//   response JSONB,
+//   expires_at TIMESTAMPTZ NOT NULL DEFAULT now() + interval '24 hours'
+// );
+
+app.post("/tools/refund_order", async (req, res) => {
+  const key = req.header("Idempotency-Key");
+  if (!key) {
+    // Structured, typed error — not a bare 400 — see failure mode 2.
+    return res.status(400).json({ error: { code: "MISSING_IDEMPOTENCY_KEY", retryable: false } });
+  }
+
+  const claim = await db.query(
+    `INSERT INTO idempotency_keys (key) VALUES ($1)
+     ON CONFLICT (key) DO NOTHING RETURNING key`,
+    [key]
+  );
+
+  if (claim.rowCount === 0) {
+    // Key already claimed — either still processing or done. Poll/replay.
+    const row = await db.query(`SELECT status, response FROM idempotency_keys WHERE key = $1`, [key]);
+    if (row.rows[0].status === "complete") {
+      res.setHeader("Idempotent-Replayed", "true");
+      return res.status(200).json(row.rows[0].response);
+    }
+    return res.status(409).json({ error: { code: "IN_FLIGHT", retryable: true } });
+  }
+
+  try {
+    const result = await refundViaPaymentsSDK(req.body.order_id, req.body.amount);
+    await db.query(`UPDATE idempotency_keys SET status='complete', response=$2 WHERE key=$1`, [key, result]);
+    return res.status(200).json(result);
+  } catch (err) {
+    // A declined card is terminal; a gateway timeout is retryable.
+    // Distinguish or the caller retries a refund that will never succeed.
+    const retryable = err.code === "GATEWAY_TIMEOUT";
+    await db.query(`DELETE FROM idempotency_keys WHERE key = $1`, [key]); // free the key only if retryable
+    return res.status(502).json({ error: { code: err.code, retryable } });
+  }
+});
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 1 — frontend: an approval surface that can't double-submit (React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React approval component</button></div>
+  <div class="tab-panel">
+<pre><code>function ApprovalCard({ proposal }: { proposal: ToolProposal }) {
+  const [status, setStatus] = useState<"pending" | "sending" | "sent">("pending");
+
+  async function approve() {
+    if (status !== "pending") return;      // blocks a double-click race
+    setStatus("sending");
+    await fetch(`/approvals/${proposal.approvalId}`, {  // approvalId is its
+      method: "POST",                                    // own idempotency
+      headers: { "Idempotency-Key": proposal.approvalId }, // key — reusing
+      body: JSON.stringify({ decision: "approve" }),       // the click twice
+    });                                                     // is a no-op.
+    setStatus("sent");
+  }
+
+  return (
+    <div className="approval-card">
+      <p>Refund <b>${proposal.args.amount}</b> on order {proposal.args.order_id}</p>
+      <button onClick={approve} disabled={status !== "pending"}>
+        {status === "pending" ? "Approve" : "Approved"}
+      </button>
+    </div>
+  );
+}
+</code></pre>
+  </div>
+</div>
+<p>Note that the frontend's approval action carries <em>its own</em> idempotency key (the approval ID), distinct from the tool call's key from Layer 3 — a double-click on "Approve" and a retried HTTP POST from the tool call are two different retry surfaces, and conflating them is how teams end up idempotent against the wrong request.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>No idempotency key at all.</strong> Symptom: the cold open — two <code>execute_tool</code> spans with identical arguments and different <code>tool_call_id</code>s, both showing a successful result, and a downstream ledger with two rows for one logical action. Root cause is almost always a retrying HTTP client sitting between the model and a tool that was written as if it would only ever be called once.</li>
+<li><strong>Errors aren't typed as retryable or terminal.</strong> Symptom: a trace shows five, ten, twenty consecutive <code>execute_tool</code> spans, all failing with the same argument, all logged as generic exceptions. A card decline is permanent; a gateway timeout is transient — if the tool returns an undifferentiated <code>Error: refund failed</code> for both, the orchestrator's blanket retry policy hammers a call that will never succeed, burning latency and, if the tool is metered, real money. The MCP tools spec's <code>isError</code> flag exists precisely to give callers this signal at the protocol level — use an equivalent structured field even outside MCP.</li>
+<li><strong>A schema field changes without a version bump.</strong> Symptom: a spike in schema-validation-error rate immediately after a deploy, correlated in your trace tool with the deploy timestamp — the model keeps sending <code>amount_cents</code> because that's what it saw in the system prompt's tool description at the start of a long-running session, while the endpoint now expects <code>amount</code>. Long sessions and cached system prompts mean old and new tool contracts run concurrently; an unversioned rename breaks every in-flight session at once instead of failing loudly at the boundary.</li>
+<li><strong>The idempotency key's TTL or derivation is wrong.</strong> Symptom one: a legitimate second refund on the same order, issued a week later for an unrelated reason, silently returns last week's cached response because the key was derived from <code>order_id</code> alone instead of a per-attempt identifier — "the tool said success but the ledger never moved." Symptom two: a key expires (Stripe's default window is 24 hours) mid-retry on a genuinely slow operation, so a legitimate retry after the TTL executes the side effect a second time, which is the original bug wearing a disguise.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — full contract vs. a bare schema</div>
+<p>Reach for the full contract — idempotency keys, a versioned schema, a typed retryable/terminal error field — when the tool has side effects that cost money, mutate durable state, or are expensive to reverse: payments, infrastructure changes, sending an external message, deleting a resource. That's exactly the set of tools where "called twice" and "called once" produce different outcomes in the world.</p>
+<p>Stay with a bare JSON-schema function and let the orchestrator retry freely when the tool is a pure read with no side effects — search, lookup, describe. Duplicate reads are free; building idempotency-key plumbing for a <code>get_order_status</code> tool is solving a problem that doesn't exist and adds a database round-trip to every call for no benefit. The dividing line isn't how important the tool feels — it's whether calling it twice changes the world twice.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> stand up the API-layer endpoint from §3 backed by a real database, and prove with <code>curl</code> that a retried call replays instead of re-executing.</p>
+<ol>
+<li>Run Postgres locally: <code>docker run -d --name pg -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:16</code>, then create the <code>idempotency_keys</code> table and a <code>refunds</code> ledger table (<code>id, order_id, amount, created_at</code>) from the DDL comment in §3.</li>
+<li>Wire up the Express handler from Layer 2, with <code>refundViaPaymentsSDK</code> stubbed to insert one row into <code>refunds</code> and return a fake transaction ID.</li>
+<li>Fire the first call: <code>curl -X POST localhost:3000/tools/refund_order -H "Idempotency-Key: k-001" -H "Content-Type: application/json" -d '{"order_id":"ord_42","amount":340}'</code>. Confirm it returns 200 with a transaction ID.</li>
+<li>Fire the exact same call again with the same key. Confirm the response body is byte-identical and the response includes <code>Idempotent-Replayed: true</code>.</li>
+<li>Query <code>SELECT count(*) FROM refunds WHERE order_id = 'ord_42'</code> — it must return <b>1</b>, not 2.</li>
+<li>Fire a third call with a different key (<code>k-002</code>) and the same <code>order_id</code>. Confirm it executes again (the count becomes 2) — proving the key, not the order ID, is what's being deduplicated.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ Two requests with the same <code>Idempotency-Key</code> produce one row in <code>refunds</code> and an identical response body.</li>
+<li>✅ The replayed response carries <code>Idempotent-Replayed: true</code>; the original does not.</li>
+<li>✅ A request with a missing <code>Idempotency-Key</code> header is rejected with <code>{"error":{"code":"MISSING_IDEMPOTENCY_KEY","retryable":false}}</code> and never reaches <code>refundViaPaymentsSDK</code>.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A teammate proposes skipping harness-side key generation: instead, add "call each tool with a unique idempotency key, and reuse the same key if you're retrying your own call" to the system prompt, and let the model generate the key itself. What's wrong with that, and what would you do instead?</strong></p>
+<p><em>Strong answer sketch: idempotency is a guarantee about identity across separate attempts, and the model has no reliable notion of "this is the same attempt as before" — it's a stateless function of its context window, and a retry might arrive as a fresh turn where the model has no memory of having generated a key moments ago, so it mints a new one and defeats the dedup. The failure runs the other direction too: a model asked to "reuse keys for retries" can just as easily conflate two legitimately different calls that happen to look similar in context — over-collapsing a second, intentional refund into a replay of the first. Idempotency keys need to come from something that actually tracks attempt identity across retries: the harness, keyed off a stable (session_id, plan_step_id) pair that doesn't change no matter how many times that specific step is retried, exactly like §3's Python snippet. This is the general "agent proposes, deterministic engine disposes" boundary — the model decides <em>what</em> tool to call and with <em>what</em> arguments; a deterministic piece of code the model doesn't control decides the request's identity, because that decision has to be consistent to be worth anything, and consistency is not a property a non-deterministic generator can be trusted to hold on its own.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://docs.stripe.com/api/idempotent_requests">Stripe — Idempotent requests</a> (the 24-hour key TTL and "save the first response, replay it on retry" pattern this article's data layer borrows directly)</li>
+<li><a href="https://google.aip.dev/155">Google AIP-155 — Request identification</a> (the <code>request_id</code>/idempotency pattern generalized across REST and RPC API styles)</li>
+<li><a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools">Model Context Protocol — Tools</a> (the <code>isError</code> flag and <code>structuredContent</code> shape referenced in failure mode 2, for typing execution errors at the protocol level)</li>
+<li><a href="https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/">IETF httpapi WG — The Idempotency-Key HTTP Header Field</a> (expired as a working-group draft, but documents the header-field convention this pattern is built on)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-17 · Stable: the idempotency-key pattern itself (Stripe's implementation, AIP-155) has been production practice for over a decade and isn't expected to change. Worth rechecking: MCP's <code>isError</code>/<code>structuredContent</code> shape, cited from the 2025-06-18 spec revision — MCP has moved fast on tool-result structure and a newer revision may adjust field names.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: Pillar 4's "tool descriptions are prompts" and MCP security articles — a contract this solid is the precondition for reasoning about what a malicious or buggy tool description can and can't get away with. Pairs with <a href="opentelemetry-for-agents-full-stack-tracing.html">OpenTelemetry for Agents</a> — the duplicate-span pattern in this article's cold open is exactly what that article's tracing setup would surface first.</p>
+
+<nav class="pager">
+  <a href="opentelemetry-for-agents-full-stack-tracing.html">← PREV — OpenTelemetry for Agents</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
