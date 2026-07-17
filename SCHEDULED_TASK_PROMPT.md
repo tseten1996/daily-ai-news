@@ -28,6 +28,29 @@
   indexes the manual — it is not rendered on the page.
 - All pages are self-contained (inline CSS/JS, no external dependencies, light/dark via
   `prefers-color-scheme`).
+- `articles/` — the Articles stream: pillar-organized full-stack agentic engineering
+  articles, self-contained HTML like everything else above. `articles/LEDGER.md` is the
+  append-only dedup ledger (topic/date/concepts) — read it before writing a new one.
+
+## Architecture in transition — read before touching `articles/`
+
+`site/` is a working [Astro](https://astro.build) project — the target architecture for
+the Articles stream, decided in `docs/decisions/ADR-0001-adopt-astro-for-spa-migration.md`.
+**It is not deployed yet** (see `docs/roadmap/roadmap.md`, "Wire `site/` into CI/deploy" —
+still open as of 2026-07-17). Until that lands:
+
+- **Keep authoring new articles exactly as documented below** (self-contained HTML under
+  `articles/`, updating `articles/index.html` and `articles/LEDGER.md`). Do not switch new
+  articles to the Astro/MDX pipeline yet — anything written only under `site/` does not
+  currently ship to the live site, and a daily run's job is to grow what's actually live.
+- Do not migrate the existing published `articles/*.html` pages into `site/` — the
+  duplicate-content question (backlog item 9) isn't resolved yet.
+- Once a future run confirms `site/` is wired into deploy, this section — and the article
+  authoring steps below — should be rewritten to point at `site/src/content/articles/`
+  (see `site/README.md` for the authoring workflow and component library) instead of hand
+  authoring HTML. Do not make that change yourself unless you've verified the deploy wiring
+  is live; if you're unsure, leave this section and the steps below untouched and flag it in
+  your run's final summary instead.
 
 ## Every daily run does two jobs
 

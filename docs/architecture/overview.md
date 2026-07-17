@@ -1,42 +1,72 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-17 (bootstrap run)
+Last reviewed: 2026-07-17 (Astro pilot added — see ADR-0001)
 
 ## What this repository is
 
-A personal AI-news blogging platform published as static, hand-authored HTML.
-There is no application framework, no build step, and no server-side code —
-every page is a self-contained `.html` file that a browser renders directly.
+A personal AI-news blogging platform, in transition from static,
+hand-authored HTML to a componentized, build-based architecture (Astro).
 Content is added by an automated daily agent run (see
 `SCHEDULED_TASK_PROMPT.md` at the repo root, which is the operating spec for
 that run — distinct from the architecture-review agent that owns this `docs/`
 tree).
 
+**Current vs. target state:** `index.html`, `articles/*.html`, and
+`manual/*.html` at the repo root are the **legacy architecture** — still
+live, still how the site is served today, unchanged by the migration below.
+`site/` is the **target architecture** — a real Astro project, not yet
+wired into deployment, currently piloted only for new Articles-stream
+content. See `docs/decisions/ADR-0001-adopt-astro-for-spa-migration.md`
+for the full rationale and migration plan, and
+`docs/roadmap/roadmap.md` for what's still open (CI/deploy wiring, the
+fate of the 3 already-published legacy articles, whether the Trends Board
+and Manual follow the same pattern).
+
 ## Stack
 
-- **Language:** HTML5 + inline CSS + inline vanilla JS. No TypeScript, no
-  JSX, no templating language.
-- **Dependencies:** none. Every page is fully self-contained — no CDNs, no
-  external fonts, no npm packages, no `package.json`. Light/dark theming
-  uses `prefers-color-scheme` media queries only.
-- **Build pipeline:** none. There is no bundler, no transpiler, no minifier.
-  The files in the repo are exactly what a browser receives.
-- **Hosting:** not defined in-repo (no CI/CD config, no deploy workflow
-  found). Presumed static hosting (e.g. GitHub Pages) but not confirmed.
-- **Tests:** none exist. No test runner, no Playwright config, no CI
-  workflow files (`.github/workflows/` does not exist).
+**Legacy (repo root — live today):**
+- HTML5 + inline CSS + inline vanilla JS. No TypeScript, no JSX, no
+  templating language.
+- Dependencies: none. Every page is fully self-contained — no CDNs, no
+  external fonts, no npm packages. Light/dark theming uses
+  `prefers-color-scheme` media queries only.
+- Build pipeline: none. The files in the repo are exactly what a browser
+  receives.
+- Tests: none. No test runner, no Playwright config committed (Playwright
+  is used ad hoc by the daily agent run for manual verification, per
+  `SCHEDULED_TASK_PROMPT.md`).
+
+**Target (`site/` — pilot, not yet deployed):**
+- [Astro](https://astro.build) (static output, component islands),
+  TypeScript (`astro check` strict mode), MDX for content authoring, Zod
+  via Astro Content Collections for front-matter schema validation. See
+  `docs/decisions/ADR-0001-adopt-astro-for-spa-migration.md`.
+- Has its own `package.json`/`node_modules` (gitignored) — the first
+  Node/npm dependency tree in this repository.
+
+**Hosting:** GitHub Pages, via `.github/workflows/deploy-pages.yml`
+(deploys the entire repo root on push to the trunk branch — added after
+the initial bootstrap audit, which had found no deploy workflow). This
+workflow uploads raw files with no build step; it does not currently
+build or publish anything from `site/` — see the roadmap for that
+follow-up.
 
 ## Repository layout
 
 ```
-index.html              Trends Board — home page, bookmark-card UI of daily AI trend topics
-articles/                Long-form article stream ("The Daily AI News")
+index.html              [legacy, live] Trends Board — home page, bookmark-card UI of daily AI trend topics
+articles/                [legacy, live] Long-form article stream ("The Daily AI News")
   index.html             Article listing page
   LEDGER.md              Append-only dedup ledger of published articles (topic/date/concepts)
   <slug>.html            One file per published article, self-contained
-manual/                  "The Agentic Systems Field Manual" — a 16-module curriculum
+manual/                  [legacy, live] "The Agentic Systems Field Manual" — a 16-module curriculum
   index.html             Manual home: dependency graph (SVG) + site-map cards + module statuses
   module-NN.html         One file per published module (00 published as reference format)
+site/                    [target, pilot — not deployed] Astro project; see ADR-0001
+  src/content/articles/  New articles authored as MDX + typed front matter here going forward
+  src/layouts/           BaseLayout (SEO: meta/OG/Twitter/JSON-LD) + ArticleLayout
+  src/components/        Shared CodeTabs, Figure, Judgment, FailureBlock components
+.github/workflows/       GitHub Pages deploy workflow (builds from repo root only, today)
 SCHEDULED_TASK_PROMPT.md Operating spec for the daily content-generation agent run
 docs/                    This knowledge base (architecture-review agent's memory)
 ```
@@ -68,11 +98,16 @@ docs/                    This knowledge base (architecture-review agent's memory
 - As of this review: modules 00–05 published (6/16), module 06 queued
   next.
 
-### 3. Articles (`articles/`)
-- A newer, third content stream ("pillar"-organized full-stack agentic
-  engineering articles), tracked via `articles/LEDGER.md` for dedup by
-  topic/concept rather than exact title match.
-- As of this review: 2 articles published.
+### 3. Articles — legacy (`articles/`) and pilot (`site/`)
+- A "pillar"-organized full-stack agentic engineering article stream,
+  tracked via `articles/LEDGER.md` for dedup by topic/concept rather than
+  exact title match. As of this review: 3 articles published, all as
+  legacy hand-authored HTML.
+- **New articles going forward are authored through `site/`** (Astro
+  content collections + MDX), per ADR-0001 — see
+  `site/src/content/articles/example-post.mdx` for the template and
+  authoring workflow. The 3 already-published legacy articles have not
+  been migrated; whether/how to do that is an open roadmap item.
 
 ## Data flow
 
@@ -95,13 +130,21 @@ card-rendering script; module pages' tab-switching JS).
 
 ## Build & deploy pipeline
 
-None exists today. There is no `package.json`, no lockfile, no CI
-workflow, no linter config, and no test runner anywhere in the repository.
-"Verification" for the daily content-authoring run is manual/agent-driven
-(opening pages in a headless browser via Playwright per
-`SCHEDULED_TASK_PROMPT.md`'s "Finish every run" section), not an automated
-gate. This is a significant gap from a stewardship standpoint — see
-`docs/technical-debt/backlog.md`.
+**Legacy site:** deployed via `.github/workflows/deploy-pages.yml`, which
+uploads the entire repo root to GitHub Pages on push to the trunk branch
+— no build step, no lint/type-check, no test gate. "Verification" for the
+daily content-authoring run is manual/agent-driven (opening pages in a
+headless browser via Playwright per `SCHEDULED_TASK_PROMPT.md`'s "Finish
+every run" section), not an automated gate. This remains a real gap for
+the legacy pages — see `docs/technical-debt/backlog.md`.
+
+**`site/` (Astro pilot):** has a real build step (`npm run build`) and a
+type-checker (`astro check`), both currently run manually/by-agent and
+verified clean, but **not wired into CI** — a push to the trunk branch
+today does not build or deploy anything from `site/`. Wiring that up is
+an explicit, deliberately deferred follow-up (see roadmap) so that
+introducing the new pipeline could not, even accidentally, break the live
+site in this change.
 
 ## Notable conventions worth preserving
 

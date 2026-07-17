@@ -1,49 +1,61 @@
 # Roadmap
 
-Last reviewed: 2026-07-17 (bootstrap run). Reflects the initial audit in
-`docs/technical-debt/backlog.md`. Re-prioritize as runs land.
+Last reviewed: 2026-07-17 (Astro pilot added — see ADR-0001). Reflects the
+initial audit in `docs/technical-debt/backlog.md` plus the SPA/Astro
+migration decision. Re-prioritize as runs land.
 
 ## Immediate (next 1-3 runs)
 
-- **Add real SEO meta tags per page** (backlog #1, slice a): unique
-  `<meta name="description">`, `rel="canonical"`, Open Graph, and Twitter
-  Card tags on `index.html`, `articles/*.html`, and `manual/*.html`.
-  Mechanical, low-risk, high-value — good first non-bootstrap task.
-- **Add `robots.txt` and a hand-maintained `sitemap.xml`** (backlog #2).
-  Consistent with the no-build-step philosophy; can be maintained the same
-  way `articles/LEDGER.md` is — updated by each run that adds a page.
+- **Wire `site/` into CI/deploy.** Decide the output path (e.g. Pages
+  serves `site/dist/` at `/articles/` while the legacy root stays for
+  everything else, vs. a subpath deploy) and add the build step to
+  `.github/workflows/deploy-pages.yml`. Until this lands, `site/` is
+  dev-only and cannot be treated as "shipped."
+- **Decide the fate of the 3 already-published legacy articles**
+  (`articles/*.html`): leave as-is, migrate into `site/` with redirects,
+  or something else — needs its own short ADR given the duplicate-content
+  SEO risk of two live versions of the same article. Blocks a clean
+  cutover.
+- **Add real SEO meta tags to the still-legacy pages** (backlog #1,
+  slice a): `index.html` and `manual/*.html` are unaffected by the Astro
+  pilot (which only covers new Articles-stream content) and still have
+  zero real `<meta name="description">`/canonical/OG/Twitter tags.
+  Mechanical, low-risk — do not wait on the Astro migration to fix this
+  for the pages Astro doesn't cover yet.
+- **Add `robots.txt` and a hand-maintained `sitemap.xml`** (backlog #2),
+  covering both the legacy pages and whatever `site/` pages go live once
+  deployed.
 - **Fix Trends Board heading hierarchy** (backlog #4): confirm intended
   outline, close the h2→h4 gap.
 
-## Next (once Immediate items land)
+## Next
 
-- **JSON-LD Article/BlogPosting structured data** (backlog #1, slice b)
-  for article and module pages, once basic meta tags exist.
-- **Decide on tooling strategy via ADR** (backlog #6): can we get
-  lint/a11y/link-checking without introducing a build step that conflicts
-  with the "fully self-contained page" design principle? Options to
-  weigh in the ADR: (a) CI-only tooling that lints/tests the checked-in
-  HTML without changing how pages ship (no bundler in the served
-  artifact), (b) accept a minimal dev-only tooling layer, (c) stay
-  tooling-free and rely on agent-driven manual verification indefinitely.
-  This blocks backlog items #5, #7, #8.
+- Migrate the Astro pilot's first *real* (non-template) article, once CI
+  wiring and the legacy-article-fate ADR above are both resolved — proves
+  the pipeline end-to-end with production content, not just the example
+  template.
+- **Decide on tooling strategy for the legacy pages via ADR** (backlog
+  #6): `site/` answers this question for new Articles-stream content, but
+  the Trends Board and Manual streams remain fully tooling-free. Decide
+  deliberately whether they should eventually adopt the same pipeline,
+  stay hand-authored indefinitely, or land on a third option.
+- Automated accessibility checks (backlog #5) — straightforward to add to
+  `site/`'s build (e.g. via a Playwright + axe check) once CI exists for
+  it; still blocked for the legacy pages on the tooling ADR above.
 
 ## Future
 
-- RSS/Atom feed (backlog #3) — depends on the tooling ADR if generated,
-  or can proceed hand-maintained in parallel with the sitemap.
-- Automated accessibility checks (backlog #5) — depends on tooling ADR.
-- Playwright E2E smoke tests for critical journeys — depends on tooling
-  ADR.
-- Revisit CSS/JS duplication across pages (backlog #7) as a deliberate
-  ADR-driven decision, not an ad hoc refactor.
+- RSS/Atom feed (backlog #3).
+- Evaluate whether the Trends Board and/or Field Manual should migrate to
+  the same Astro pattern — a separate decision, not assumed by ADR-0001.
+- Revisit CSS/JS duplication across the *legacy* pages (backlog #7) — the
+  Astro pilot already resolves this for anything built through it via
+  shared layouts/components.
 
 ## Ideas (unscoped, not yet backlog items)
 
-- Consider whether the Trends Board's client-side rendering script should
-  be reused (not necessarily extracted) across the Articles and Manual
-  index pages for consistency, once the tooling ADR clarifies what
-  "shared code without an external dependency" is allowed to look like.
 - Revisit whether a lightweight, dependency-free image pipeline is needed
   if the content model ever adds screenshots/diagrams as raster images
-  (currently all diagrams are inline SVG — keep it that way if possible).
+  (currently all diagrams are inline SVG — keep it that way if possible;
+  `site/`'s `Figure` component only supports inline SVG today, by
+  design).

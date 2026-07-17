@@ -10,7 +10,8 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
 ## Priority 5 — SEO
 
-1. **OPEN — No SEO metadata anywhere in the site.** Audited all HTML files
+1. **PARTIALLY ADDRESSED (2026-07-17) for new content only** — No SEO
+   metadata anywhere in the *legacy* site. Audited all HTML files
    (`index.html`, `articles/*.html`, `manual/*.html`): zero real
    `<meta name="description">` tags, zero Open Graph tags, zero Twitter
    Card tags, zero `rel="canonical"` links, zero JSON-LD structured data.
@@ -18,11 +19,13 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    *comment* (front-matter for future authoring runs) — it is never
    emitted as an actual `<meta>` tag, so it has no SEO effect today. This
    directly contradicts the platform's stated SEO goals (discoverability,
-   social sharing, Article/BlogPosting JSON-LD). High value, low risk —
-   good candidate for a near-term run. Likely needs splitting: (a) add
-   real `<meta description>` + canonical + OG/Twitter tags per page first
-   (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
-   article/module page as a follow-up slice.
+   social sharing, Article/BlogPosting JSON-LD). **Fixed architecturally
+   for the Astro pilot** (`site/` — see ADR-0001): its shared
+   `BaseLayout` emits real meta description, canonical, OG, Twitter, and
+   JSON-LD tags automatically for every page built through it. **Still
+   open** for `index.html`, `manual/*.html`, and the 3 already-published
+   `articles/*.html` pages, none of which are covered by the Astro pilot
+   yet. Remains a good near-term, low-risk task for those specific files.
 2. **OPEN — No `robots.txt` or `sitemap.xml`.** Neither file exists at the
    repo root. Crawlers have no sitemap to discover the ~19 content pages
    (16 trend topics live inside one `index.html`, but articles and manual
@@ -49,47 +52,65 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
 ## Priority 7 — Architecture health
 
-6. **OPEN — No build, lint, type-check, or CI pipeline at all.** No
-   `package.json`, no linter config (no HTML/CSS lint), no CI workflow
-   files under `.github/workflows/`. This repo currently has *nothing*
-   for the "verify before PR" step in the agent's non-negotiable safety
-   rules to run beyond manual inspection. This is the most foundational
-   gap: every other quality gate (accessibility CI, SEO validation,
-   broken-link checking) is blocked on deciding whether to introduce
-   *any* tooling at all, and if so, how to do it without violating the
-   "no build step, fully self-contained pages" design principle the
-   content-authoring spec (`SCHEDULED_TASK_PROMPT.md`) explicitly relies
-   on. This needs an ADR before any tooling is introduced — see roadmap.
-7. **OPEN — Significant CSS/JS duplication across every page.** Each of
-   the 12 HTML files independently redefines the same category of design
-   tokens (paper/ink/accent/border custom properties, similar dark-mode
-   media query, similar mono/serif font stacks) with page-family-specific
+6. **PARTIALLY ADDRESSED (2026-07-17) for the Astro pilot only** — No
+   build, lint, type-check, or CI pipeline for the *legacy* pages. The
+   original finding: no `package.json`, no linter config, no CI workflow
+   under `.github/workflows/` — this repo had *nothing* for the "verify
+   before PR" step beyond manual inspection, and every other quality gate
+   was blocked on deciding whether to introduce tooling at all. **ADR-0001
+   answers this for new Articles-stream content**: `site/` has a real
+   build (`npm run build`) and type-check (`astro check`), both verified
+   clean, deliberately kept isolated from the legacy pages so it can't
+   break them. **Still fully open** for `index.html` and `manual/*.html`,
+   and for the CI-side question of *running* `site/`'s checks
+   automatically (see roadmap: "Wire `site/` into CI/deploy").
+7. **OPEN for legacy pages; RESOLVED for the Astro pilot** — Significant
+   CSS/JS duplication across every legacy page. Each of the 12 legacy
+   HTML files independently redefines the same category of design tokens
+   (paper/ink/accent/border custom properties, similar dark-mode media
+   query, similar mono/serif font stacks) with page-family-specific
    variants (Trends Board vs. Articles vs. Manual each have their own
-   palette). This is likely intentional (self-containment is a stated
-   design goal — each page must render correctly with zero external
-   requests), so this is *not* a straightforward "extract a shared
-   stylesheet" fix — doing so would reintroduce an external dependency
-   the format explicitly avoids. Flagging as a tension to resolve
-   deliberately (ADR) rather than a bug.
+   palette). `site/`'s `BaseLayout`/`ArticleLayout` resolve this for
+   anything built through the Astro pipeline — tokens are defined once
+   and shared, while the *built output* is still a self-contained HTML
+   file per page (no client-side CSS request), so the self-containment
+   property is preserved even though the *source* is now componentized.
+   Still open for the legacy pages, which ADR-0001 explicitly does not
+   touch.
+8. **OPEN — Astro pilot (`site/`) is not wired into CI/deploy.** Verified
+   locally only (`npm run build`, `astro check`, manual Playwright
+   screenshot pass — see ADR-0001). A push to the trunk branch today does
+   not build or publish anything from `site/`. See roadmap "Immediate".
+9. **OPEN — Fate of the 3 already-published legacy articles is
+   undecided.** Running both a legacy `articles/*.html` version and a
+   future Astro-migrated version of the same article live at the same
+   time would be duplicate content for SEO purposes. Needs a short ADR
+   before any legacy article is migrated into `site/`. See roadmap
+   "Immediate".
 
 ## Priority 8 — Testing gaps
 
-8. **OPEN — Zero automated tests of any kind.** No unit tests (no logic to
-   unit-test today — it's static content), no component tests, no
-   Playwright E2E for the critical journeys the domain standards call out
-   (reading an article, navigation, RSS/sitemap availability once they
-   exist). The daily content-authoring run does do a manual Playwright
-   smoke pass (open changed pages, check console errors, screenshot) per
-   `SCHEDULED_TASK_PROMPT.md`, but nothing is codified as a repeatable,
-   CI-enforceable test. Blocked on the same tooling-introduction decision
-   as item 6.
+10. **OPEN — Zero automated tests for the legacy pages.** No unit tests
+    (no logic to unit-test — it's static content), no component tests, no
+    Playwright E2E for the critical journeys the domain standards call out
+    (reading an article, navigation, RSS/sitemap availability once they
+    exist). The daily content-authoring run does do a manual Playwright
+    smoke pass (open changed pages, check console errors, screenshot) per
+    `SCHEDULED_TASK_PROMPT.md`, but nothing is codified as a repeatable,
+    CI-enforceable test. `site/` has `astro check` (type-check) but no
+    E2E/component tests yet either. Blocked on item 8 (CI wiring) to
+    become enforceable rather than just runnable locally.
 
 ## Priority 10 — Documentation
 
-9. **DONE (2026-07-17)** — This knowledge base did not exist before today;
-   bootstrap run created it (`docs/architecture/overview.md`,
-   `docs/roadmap/roadmap.md`, this backlog, and the empty-but-structured
-   remaining KB files). No code changed.
+11. **DONE (2026-07-17)** — This knowledge base did not exist before that
+    day's bootstrap run, which created it (`docs/architecture/overview.md`,
+    `docs/roadmap/roadmap.md`, this backlog, and the empty-but-structured
+    remaining KB files). No code changed in that run.
+12. **DONE (2026-07-17)** — Wrote ADR-0001 and scaffolded the Astro pilot
+    (`site/`) per the user's request to move toward a componentized,
+    best-practices architecture. Updated this backlog, the roadmap, and
+    `docs/architecture/overview.md` to reflect current vs. target state.
 
 ## Notes / non-issues found during audit
 
