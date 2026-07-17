@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenTelemetry for Agents: Tracing a Request Across the Whole Stack · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: OpenTelemetry for Agents: Tracing a Request Across the Whole Stack
+  slug: opentelemetry-for-agents-full-stack-tracing
+  pillar: Pillar 7 — Evals, Observability & Safety
+  difficulty: Practitioner
+  series: none (standalone; sets up future observability articles)
+  tags: opentelemetry, distributed-tracing, observability, gen-ai-semconv, context-propagation, agent-runtime
+  meta description: How to propagate one trace from a browser fetch through an API gateway, an agent loop's tool calls, and a database query using OpenTelemetry's GenAI semantic conventions — and the failure modes (broken propagation, content-capture blowups, sampling that drops the one trace you needed) that show up once you actually ship it.
+  read time: ~10 min (~1,850 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · EVALS, OBSERVABILITY &amp; SAFETY</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 7 · Evals, Observability &amp; Safety</div>
+  <h1>OpenTelemetry for Agents: Tracing a Request Across the Whole Stack</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Your APM says the API is fast. The user says it took eleven seconds. Both are true, and the gap between them lives in a part of the stack nobody instrumented — until one trace ID ties the browser, the gateway, the agent loop, and the database query together.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-17</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~10 min (~1,850 words)</b></span>
+    <span>LAB <b>trace a real request tree across three layers in Jaeger</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>An incident channel lights up: "agent chat is slow for some users, fine for others — same model, same prompt length." The API gateway's dashboard shows p95 latency at 400ms, well within SLA. The support ticket says the customer waited eleven seconds and watched a spinner. Nobody can explain the gap: the frontend's session-replay tool shows one opaque fetch call, the backend's APM shows a fast HTTP handler, and the agent runtime's logs sit in a third system with timestamps that don't line up with either. The on-call engineer greps a request ID by hand across three log aggregators and finds it forty minutes later, sitting inside a single tool call that fanned out to a database query with no index on the filter column. The 400ms and the 11 seconds were both real, correctly measured, for two spans of the same request that nothing had ever connected.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>Before distributed tracing was standard practice, teams correlated a request across services the manual way: generate a request ID at the edge, thread it through every function call and log line as an extra argument, and grep for it after the fact across whatever logging backends each team happened to own. This works until the request crosses a boundary someone forgot to thread the ID through — a background job, a retry, a fire-and-forget call into the agent runtime — at which point the trail goes cold and you're back to correlating by timestamp and hoping the clocks agree. Each layer also tended to buy its own observability tool — a frontend RUM product, a backend APM agent, whatever the LLM SDK's default logger printed — and none of them knew the others existed, so "what happened during this one turn" meant opening three consoles and reconciling them by eye.</p>
+<p>OpenTelemetry (OTel) standardizes the two things that fix this: a wire format for propagating trace context across process and service boundaries (the W3C <code>traceparent</code> header), and a data model — traces made of parent/child spans — that any instrumented layer can emit into and any backend can render as one waterfall. As of mid-2026, OTel also ships GenAI semantic conventions (the <code>gen_ai.*</code> attribute namespace) purpose-built for LLM and agent spans — standardized names for the model called, token counts, tool arguments, and agent hand-offs — so an agent's spans look the same whether your backend is Jaeger, Honeycomb, or Datadog. These conventions are still in <em>Development</em> status, not stable, and attribute names have moved before; treat the field names below as correct as of this writing, not frozen forever.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>The mechanism is one object — a <code>trace_id</code> — created once at the edge and carried forward, unchanged, by every layer it passes through. Each layer adds a <em>span</em> (an operation with a start time, an end time, and attributes) as a child of whatever span was active when it started. The parent-child nesting is what turns four unrelated systems' worth of logs into one causal tree.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 380" role="img" aria-label="Trace tree: a browser root span calls an API server span, which calls an agent invoke_agent span containing a chat span and an execute_tool span, and the tool span contains a database query span — all sharing one trace id.">
+  <defs>
+    <marker id="ta1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">BROWSER / FRONTEND</text>
+  <rect x="20" y="32" width="200" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="120" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">fetch() root span</text><text x="120" y="66" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">injects traceparent</text>
+
+  <text x="20" y="106" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="114" width="300" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="170" y="135" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">POST /agent/turn — server span</text><text x="170" y="148" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">extracts traceparent, opens child span</text>
+  <line x1="120" y1="74" x2="120" y2="98" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta1)"/>
+  <path d="M120 98 L170 98 L170 110" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta1)"/>
+
+  <text x="20" y="196" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="204" width="360" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="200" y="225" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">invoke_agent — span</text><text x="200" y="238" text-anchor="middle" class="svg-label" font-size="9" fill="var(--muted)">gen_ai.agent.name, gen_ai.operation.name</text>
+  <path d="M170 156 L170 180 L200 180 L200 200" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta1)"/>
+
+  <rect x="60" y="262" width="150" height="40" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="135" y="282" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">chat {model}</text><text x="135" y="294" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">gen_ai.usage.*_tokens</text>
+  <rect x="240" y="262" width="150" height="40" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="315" y="282" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">execute_tool lookup_order</text><text x="315" y="294" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">gen_ai.tool.call.arguments</text>
+  <path d="M180 246 L135 246 L135 258" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta1)"/>
+  <path d="M220 246 L315 246 L315 258" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta1)"/>
+
+  <text x="20" y="336" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER</text>
+  <rect x="240" y="344" width="150" height="30" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="315" y="364" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">SELECT … orders (db span)</text>
+  <path d="M315 302 L315 340" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#ta1)"/>
+
+  <text x="470" y="196" class="svg-label" font-size="9" fill="var(--muted)" text-anchor="start">One trace_id, generated once at the</text>
+  <text x="470" y="210" class="svg-label" font-size="9" fill="var(--muted)" text-anchor="start">browser, threads unchanged through</text>
+  <text x="470" y="224" class="svg-label" font-size="9" fill="var(--muted)" text-anchor="start">every span below it — that's the</text>
+  <text x="470" y="238" class="svg-label" font-size="9" fill="var(--muted)" text-anchor="start">entire mechanism.</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — Same request, four layers, one <code>trace_id</code>. The db query span nests under <code>execute_tool</code> because context propagation, not a shared logging library, is what connects them.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["fetch() — root span<br/>injects traceparent"] --> B["POST /agent/turn — server span"]
+  B --> C["invoke_agent — span"]
+  C --> D["chat {model}"]
+  C --> E["execute_tool lookup_order"]
+  E --> F["SELECT ... orders — db span"]</pre>
+</details>
+</figure>
+
+<h3>Layer 1 — frontend: root span on the browser, propagated over the wire (TypeScript)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — OTel Web SDK</button></div>
+  <div class="tab-panel">
+<pre><code>// npm install @opentelemetry/sdk-trace-web @opentelemetry/api
+import { trace } from "@opentelemetry/api";
+import { WebTracerProvider } from "@opentelemetry/sdk-trace-web";
+
+const provider = new WebTracerProvider();
+provider.register(); // installs the W3C tracecontext propagator by default
+const tracer = trace.getTracer("agent-chat-ui");
+
+async function sendTurn(sessionId: string, message: string) {
+  return tracer.startActiveSpan("submit_turn", async (span) => {
+    span.setAttribute("session.id", sessionId);
+    try {
+      const res = await fetch(`/agent/turn`, {
+        method: "POST",
+        // The registered propagator injects `traceparent` into this fetch's
+        // headers automatically — this line is here to make that fact visible.
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, message }),
+      });
+      const traceId = span.spanContext().traceId;
+      console.log(`support reference: trace ${traceId}`); // surface for tickets
+      return await res.json();
+    } finally {
+      span.end();
+    }
+  });
+}
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — agent runtime: nested spans with GenAI semantic-convention attributes (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — OTel SDK + gen_ai.* attributes</button></div>
+  <div class="tab-panel">
+<pre><code># pip install opentelemetry-sdk opentelemetry-exporter-otlp anthropic
+from opentelemetry import trace
+
+tracer = trace.get_tracer("agent-runtime")
+
+def run_turn(agent_name: str, user_message: str, tools: list):
+    # This span is opened as a CHILD of whatever context the API layer
+    # extracted from the inbound traceparent header — see Layer 2 below.
+    with tracer.start_as_current_span("invoke_agent") as agent_span:
+        agent_span.set_attribute("gen_ai.operation.name", "invoke_agent")
+        agent_span.set_attribute("gen_ai.agent.name", agent_name)
+
+        with tracer.start_as_current_span("chat claude-sonnet-5") as chat_span:
+            chat_span.set_attribute("gen_ai.operation.name", "chat")
+            chat_span.set_attribute("gen_ai.request.model", "claude-sonnet-5")
+            response = anthropic_client.messages.create(
+                model="claude-sonnet-5", max_tokens=1024,
+                messages=[{"role": "user", "content": user_message}], tools=tools,
+            )
+            chat_span.set_attribute("gen_ai.usage.input_tokens", response.usage.input_tokens)
+            chat_span.set_attribute("gen_ai.usage.output_tokens", response.usage.output_tokens)
+
+        for block in response.content:
+            if block.type != "tool_use":
+                continue
+            with tracer.start_as_current_span(f"execute_tool {block.name}") as tool_span:
+                tool_span.set_attribute("gen_ai.operation.name", "execute_tool")
+                tool_span.set_attribute("gen_ai.tool.name", block.name)
+                # Do NOT set full arguments/results as attributes in prod — see
+                # failure mode 2. Redact or hash anything that isn't a metric.
+                result = call_tool(block.name, block.input)  # DB span nests here
+                tool_span.set_attribute("gen_ai.tool.call.result.size", len(str(result)))
+        return response
+</code></pre>
+  </div>
+</div>
+<p>The piece that makes Layer 1 and Layer 3 one trace instead of two is Layer 2: the API server (Express, Spring, whatever fronts the agent runtime) must extract the inbound <code>traceparent</code> header and re-enter that context before calling into the agent — a one-line <code>propagation.extract()</code> call most OTel HTTP auto-instrumentation packages do for you. Layer 4, the data layer, needs no code at all here: a standard <code>psycopg2</code> or JDBC OTel instrumentor reads whatever span is currently active (the <code>execute_tool</code> span above) and nests its query span under it automatically, because context propagation is ambient within a process, not something you thread through function arguments by hand. That's the whole payoff — the database query in the incident from §1 would have shown up as a labeled child span, in the same waterfall as the browser's fetch, instead of requiring a forty-minute manual grep.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>Context propagation breaks at an async boundary.</strong> Symptom: in your tracing backend, a tool call that clearly ran as part of a user's turn shows up as its own disconnected root trace instead of a child span. This happens whenever work hops onto a thread pool, a background task queue, or a fire-and-forget async call without explicitly carrying the OTel context along — the new thread or worker has no ambient context to attach to, so it starts fresh. Fix: explicitly capture <code>context.get_current()</code> before the hop and re-attach it (<code>context.attach()</code>) on the other side; for message queues, serialize the <code>traceparent</code> into the message payload itself and extract it in the consumer.</li>
+<li><strong>Content capture as span attributes becomes a cost and privacy liability.</strong> Symptom: your tracing backend's ingest cost triples and a security review flags customer PII sitting in span attributes. This happens when a team follows the GenAI conventions' optional prompt/completion capture too literally and logs full user messages or tool arguments as attributes on every span, which then get exported, indexed, and retained by a third-party backend under its own data-retention policy. Fix: default content capture off, and where you need it for debugging, gate it behind an explicit environment flag and redact or truncate before setting the attribute — never pass raw user input into <code>gen_ai.tool.call.arguments</code> in production.</li>
+<li><strong>Head-based sampling drops exactly the trace you needed.</strong> Symptom: an error is visible in your error-rate dashboard, but searching the tracing backend for a matching trace around that timestamp turns up nothing. Head-based probabilistic sampling decides whether to keep a trace at the moment it starts, before anything has gone wrong, so a 1%-sampling policy keeps roughly 1% of your failures too — which is almost never the one from the ticket in front of you. Fix: add a tail-based sampling policy (sample after the trace completes, based on whether it errored or exceeded a latency threshold) at the collector, or at minimum force-sample any trace whose root span ends in an error status.</li>
+<li><strong>High-cardinality span names blow up the backend's indexing cost.</strong> Symptom: your tracing backend's bill or query latency degrades sharply after a rollout, with no change in traffic volume. This happens when span <em>names</em> include per-request values — a tool span named <code>execute_tool lookup_order_48213</code> instead of <code>execute_tool lookup_order</code> with the order ID as an attribute — because most backends index on span name and treat each distinct name as a new time series. Fix: keep span names to a small, fixed vocabulary (operation + resource type, per the GenAI conventions' own pattern) and put anything request-specific in attributes instead.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — full distributed tracing vs. a correlation ID</div>
+<p>Reach for full OpenTelemetry instrumentation once a request genuinely crosses more than one process or service boundary with branching — an orchestrator fanning out to subagents, a tool call that hits its own microservice, or a hand-off across a queue where you need causal, timed reconstruction of what happened and in what order. The parent-child span model is what earns its cost there: it's the only structure that answers "which of these five parallel tool calls was the slow one" without hand-correlating five separate log streams by timestamp.</p>
+<p>Stay with a plain generated correlation ID threaded through structured logs when the agent is a single in-process loop calling one LLM API with no cross-service hops — a request ID in every log line, searchable in whatever log aggregator you already run, gets you 90% of the debugging value with none of the propagation plumbing, the collector infrastructure, or the sampling-policy tuning that full tracing demands. Don't adopt OTel because it's the standard; adopt it when a request's story genuinely spans systems that don't share a log stream.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> instrument a minimal agent turn across the API and agent-runtime layers, export to a local Jaeger instance, and prove one trace_id ties both layers' spans together.</p>
+<ol>
+<li>Run Jaeger locally: <code>docker run -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one:latest</code> (UI at <code>http://localhost:16686</code>, OTLP HTTP receiver on <code>4318</code>).</li>
+<li>Wire the Python snippet from Layer 3 into a small Flask or FastAPI handler for <code>POST /agent/turn</code>, configured with an OTLP exporter pointed at <code>http://localhost:4318/v1/traces</code>, and add one fake <code>execute_tool</code> call plus one real database or in-memory lookup nested inside it.</li>
+<li>Add OTel's auto-instrumentation for your web framework (e.g. <code>opentelemetry-instrumentation-flask</code>) so the server span extracts context from an inbound <code>traceparent</code> header automatically.</li>
+<li>Fire a request with a manually-crafted trace header: <code>curl -X POST localhost:5000/agent/turn -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" -d '{"message":"test"}' -H "Content-Type: application/json"</code>.</li>
+<li>Open Jaeger's UI, search for trace ID <code>4bf92f3577b34da6a3ce929d0e0e4736</code>, and confirm the waterfall shows <code>invoke_agent</code> → <code>chat</code> and <code>execute_tool</code> as nested children under one root.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ Jaeger's search finds the exact trace ID you passed in the <code>curl</code> header — proving the server extracted, not regenerated, the incoming context.</li>
+<li>✅ The waterfall view shows at least three nested spans (server, <code>invoke_agent</code>, <code>chat</code> or <code>execute_tool</code>) under one root, with correct parent-child indentation.</li>
+<li>✅ No span attribute in the UI contains a raw user message or tool argument — confirming your redaction from failure mode 2 actually took effect.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>Your orchestrator hands a subtask off to a worker agent by publishing a message onto a queue — not a direct function call — and the worker may not pick it up for several seconds. How do you keep that hand-off connected in your tracing, and would you make it a child span or something else?</strong></p>
+<p><em>Strong answer sketch: a direct parent-child span assumes the child starts and ends while the parent is still open, which breaks down across a queue — the orchestrator's span would have to stay open for however long the message sits queued, which pollutes latency metrics with wait time that isn't the orchestrator's own work and can hold the trace open indefinitely if the worker never picks it up. The right primitive is a span <em>link</em> rather than strict parent-child: serialize the current trace context (the <code>traceparent</code>) into the queued message's metadata, close the orchestrator's publish span normally, and have the worker's consumer start a new span that links back to that trace context instead of nesting under it. Most tracing backends render links as a visible cross-reference between two otherwise-independent traces, so you can still jump from the publish event to the eventual worker execution, but neither side's duration lies about how long the other side took. The failure mode to watch for is teams skipping this distinction and forcing parent-child semantics across the queue anyway — it works fine in the demo, then produces multi-hour "spans" in production the moment a worker is delayed, which corrupts every latency percentile the backend computes for that operation.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/">OpenTelemetry — Generative AI semantic conventions</a> (the <code>gen_ai.*</code> attribute namespace this article's code uses; explicitly marked Development status, not yet stable)</li>
+<li><a href="https://github.com/open-telemetry/semantic-conventions/blob/main/docs/gen-ai/gen-ai-agent-spans.md">open-telemetry/semantic-conventions — GenAI agent spans</a> (the <code>invoke_agent</code>/<code>execute_tool</code> span shapes and nesting rules used in §3)</li>
+<li><a href="https://www.w3.org/TR/trace-context/">W3C Trace Context</a> (the <code>traceparent</code> header format that makes cross-layer propagation interoperable regardless of vendor)</li>
+<li><a href="https://opentelemetry.io/blog/2026/genai-observability/">OpenTelemetry blog — Inside the LLM Call: GenAI Observability with OpenTelemetry (2026)</a> (worked examples of the span/attribute model against real LLM calls)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-17 · Volatile: the GenAI semantic conventions (<code>gen_ai.*</code> attribute names, the <code>invoke_agent</code>/<code>execute_tool</code> span shapes) are explicitly in Development status as of this writing — expect names to shift before a stable release, and pin exporter/collector versions accordingly. Stable: the W3C Trace Context wire format (<code>traceparent</code>) and the trace/span data model underneath it are unrelated to that churn and have been stable for years.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: correlating agent traces with app telemetry, gating releases on eval scores fed by these same spans, and frontend eval/observability (capturing UX-level failures using the browser-side root span from §3) — open items in the Pillar 7 and Pillar 9 backlogs. Pairs with <a href="streaming-agent-output-to-the-browser.html">Streaming Agent Output to the Browser</a> — that article's event pipeline is the same request path this one instruments.</p>
+
+<nav class="pager">
+  <a href="streaming-agent-output-to-the-browser.html">← PREV — Streaming Agent Output to the Browser</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
