@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hooks as Deterministic Guardrails: The Policy Layer Between the Model and the World · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Hooks as Deterministic Guardrails: The Policy Layer Between the Model and the World
+  slug: hooks-as-deterministic-guardrails
+  pillar: Pillar 4 — MCP, Skills & Hooks
+  difficulty: Practitioner
+  series: none (standalone; sets up future Pillar 4 MCP-security and Pillar 7 human-in-the-loop-approval-UX articles)
+  tags: hooks, deterministic-guardrails, policy-enforcement, human-in-the-loop, agent-runtime, audit-logging
+  meta description: Why relying on the system prompt to enforce a safety threshold fails under context compaction and injection, and how a deterministic hook layer — external to both the model and the tool's own code — blocks, rewrites, or routes a tool call to human approval before it ever executes.
+  read time: ~11 min (~1,850 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · MCP, SKILLS &amp; HOOKS</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 4 · MCP, Skills &amp; Hooks</div>
+  <h1>Hooks as Deterministic Guardrails: The Policy Layer Between the Model and the World</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">A safety rule written into a system prompt is a suggestion the model reads probabilistically. A hook is a piece of code that runs whether the model remembers the rule or not — and that difference is the entire reason the pattern exists.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-18</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~11 min (~1,850 words)</b></span>
+    <span>LAB <b>build a PreToolUse-style policy gate and prove it fails closed</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A finance-ops agent had run for forty-one turns — researching vendor invoices, reconciling two disputed line items, drafting a summary — when the user finally said "go ahead and pay it." The system prompt, set up three months earlier, said: <em>"Never call <code>wire_transfer</code> for more than $10,000 without explicit confirmation of the exact amount from the user in the same turn."</em> Session compaction had folded that instruction into a one-line summary somewhere around turn twenty-eight, the way long-running agents compact instructions to stay under budget. The model, working from a compacted context that no longer contained the threshold, called <code>wire_transfer(amount=48500)</code> in the same turn it asked "confirming $48,500 to Meridian Supply?" — a question nobody answered before the tool call fired, because the model had already decided the confirmation was rhetorical. The transfer executed. Nothing in the architecture had ever made "ask before this specific action" true regardless of what survived compaction.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>Before hooks, "make the agent behave" meant one of three things, and all three shared the same weakness: the constraint lived somewhere the model could stop seeing it. Option one was prompt engineering — write the rule into the system prompt and hope it survives however many turns, however much compaction, and however the tool's own description gets summarized when the model's attention is elsewhere. Option two was baking validation into the tool function itself — a Python <code>if amount > 10_000: raise</code> at the top of <code>wire_transfer</code>. That's more durable than a prompt, but it welds a compliance policy to application code: changing the threshold from $10,000 to $5,000 now requires a code review and a deploy of the payments integration, and if the same transfer capability is ever exposed a second way — a different team's MCP server, a batch job, a different agent — the check has to be copy-pasted and kept in sync by hand. Option three was sandboxing the whole agent process, which stops the blast radius of anything the agent does but can't express "this specific tool, above this specific amount, needs a human" — it's a perimeter fence, not a policy.</p>
+<p>What none of the three could do is guarantee the rule fires <em>regardless of what happened to the model's context</em> — the exact property that broke in the cold open. Hooks are the answer: a piece of deterministic code, external to both the model and the tool's own implementation, that the harness invokes before (and after) every tool call and that can allow, deny, rewrite, or escalate the call — independent of whether the words "check the threshold" survived to this turn.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>The mechanism is a synchronous callback the harness makes before it lets a proposed tool call touch the real world. Claude Code's implementation (verified against its current docs, AS-OF note below) is the clearest public reference: a <code>PreToolUse</code> hook receives the tool name and arguments as JSON on stdin, and its exit code plus stdout are the entire contract — exit <code>0</code> with a <code>hookSpecificOutput.permissionDecision</code> of <code>allow</code>/<code>deny</code>/<code>ask</code> gives fine-grained control (including <code>updatedInput</code> to rewrite the arguments before they reach the tool); exit code <code>2</code> is a blunt "block this, full stop." The pattern generalizes beyond that one product — LangGraph's interrupt-before-node and custom harness middleware implement the same idea under different names — but the shape is always: <em>a deterministic gate the model's own tokens cannot talk its way past</em>, because the gate never reads the model's context at all. It reads the proposed tool name and arguments, checks them against a policy that lives in a database, and decides.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 480" role="img" aria-label="Flow: agent runtime proposes wire_transfer; a PreToolUse hook checks the amount against a threshold in the policy database and always writes an audit row; under threshold it allows immediately; over threshold it creates a pending approval that streams to a frontend queue over SSE, and only the human's decision unblocks the tool call.">
+  <defs>
+    <marker id="hk1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="32" width="360" height="44" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="200" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">propose wire_transfer(amount=$48,500)</text><text x="200" y="67" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">harness calls the PreToolUse hook before executing</text>
+
+  <text x="20" y="116" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">POLICY LAYER (hook process)</text>
+  <rect x="20" y="124" width="360" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="200" y="145" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">amount vs. threshold — reads DB, not context</text><text x="200" y="158" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">never inspects the model's prompt or history</text>
+  <path d="M200 76 L200 118" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#hk1)"/>
+
+  <text x="20" y="206" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER</text>
+  <rect x="20" y="214" width="200" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="120" y="234" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">policies table</text><text x="120" y="247" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">threshold_cents lookup</text>
+  <path d="M180 166 L120 166 L120 208" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#hk1)"/>
+
+  <rect x="240" y="214" width="200" height="46" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="340" y="234" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">audit_log INSERT</text><text x="340" y="247" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">every decision, allow or ask</text>
+  <path d="M220 166 L340 166 L340 208" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#hk1)"/>
+
+  <rect x="140" y="292" width="200" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="240" y="312" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">over threshold → ask</text><text x="240" y="325" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">create pending_approvals row</text>
+  <path d="M120 260 L120 280 L240 280 L240 288" fill="none" stroke="var(--ink)" stroke-width="1.2" marker-end="url(#hk1)"/>
+
+  <text x="20" y="386" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="140" y="394" width="220" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="250" y="414" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">approval queue — SSE stream</text><text x="250" y="427" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">human clicks approve / deny</text>
+  <path d="M240 338 L250 338 L250 388" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#hk1)"/>
+
+  <text x="480" y="292" class="svg-label" font-size="9" fill="var(--muted)">Hook blocks synchronously —</text>
+  <text x="480" y="306" class="svg-label" font-size="9" fill="var(--muted)">the tool call does not fire</text>
+  <text x="480" y="320" class="svg-label" font-size="9" fill="var(--muted)">until this row's decision</text>
+  <text x="480" y="334" class="svg-label" font-size="9" fill="var(--muted)">column flips from NULL,</text>
+  <text x="480" y="348" class="svg-label" font-size="9" fill="var(--muted)">or a timeout fails it closed.</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — The hook never reads the model's context; it reads the proposed call and a policy row. That's what makes the guarantee hold regardless of compaction, injected instructions, or a long session — the gate isn't part of the conversation the model can influence with tokens.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["agent runtime: propose wire_transfer(amount=$48,500)"] --> B["policy layer: PreToolUse hook<br/>checks amount vs. threshold from DB"]
+  B --> C["DB: policies table<br/>threshold_cents lookup"]
+  B --> D["DB: audit_log INSERT<br/>every decision, allow or ask"]
+  B -->|over threshold| E["create pending_approvals row"]
+  E --> F["frontend: approval queue (SSE)<br/>human clicks approve / deny"]
+  F -->|decision written| G["hook unblocks — tool executes or is denied"]</pre>
+</details>
+</figure>
+
+<h3>Layer 3 — agent runtime: invoking the hook before every tool call (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — harness-side hook invocation</button></div>
+  <div class="tab-panel">
+<pre><code>import json, subprocess
+
+def run_pre_tool_hook(tool_name: str, tool_input: dict, session_id: str) -> dict:
+    payload = json.dumps({
+        "hook_event_name": "PreToolUse",
+        "session_id": session_id,
+        "tool_name": tool_name,
+        "tool_input": tool_input,
+    })
+    proc = subprocess.run(
+        ["python3", "hooks/policy_gate.py"],
+        input=payload, capture_output=True, text=True, timeout=15,
+    )
+    if proc.returncode == 2:
+        return {"permissionDecision": "deny", "reason": proc.stderr.strip()}
+    if proc.returncode == 0 and proc.stdout.strip():
+        return json.loads(proc.stdout)["hookSpecificOutput"]
+    # Any OTHER exit code (a crash, a typo, an unhandled exception in the
+    # hook script) is silent and non-blocking by default in most harnesses.
+    # A harness that means it must override that default here — see §4.
+    return {"permissionDecision": "deny", "reason": f"hook exited {proc.returncode}, failing closed"}
+
+def call_tool(tool_name: str, tool_input: dict, session_id: str):
+    decision = run_pre_tool_hook(tool_name, tool_input, session_id)
+    if decision["permissionDecision"] == "deny":
+        return {"error": decision.get("reason", "blocked by policy")}
+    if decision["permissionDecision"] == "ask":
+        decision = wait_for_human_approval(decision["approvalId"], timeout_s=120)
+        if decision["permissionDecision"] != "allow":
+            return {"error": "not approved in time"}
+    return execute_tool(tool_name, decision.get("updatedInput", tool_input))
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 2 &amp; 4 — the policy gate and its audit trail (Python + Postgres)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — policy_gate.py, called by the hook subprocess</button></div>
+  <div class="tab-panel">
+<pre><code>#!/usr/bin/env python3
+import sys, json, os, uuid
+import psycopg2
+
+def main():
+    event = json.load(sys.stdin)
+    if event["hook_event_name"] != "PreToolUse" or event["tool_name"] != "wire_transfer":
+        sys.exit(0)  # not our concern; normal flow decides
+
+    amount = event["tool_input"]["amount"]
+    conn = psycopg2.connect(os.environ["POLICY_DB_URL"])
+    cur = conn.cursor()
+    cur.execute("SELECT threshold_cents FROM policies WHERE tool_name = %s", ("wire_transfer",))
+    threshold = cur.fetchone()[0]
+
+    if amount * 100 <= threshold:
+        decision = "allow"
+        output = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
+    else:
+        approval_id = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO pending_approvals (id, session_id, tool_input) VALUES (%s,%s,%s)",
+            (approval_id, event["session_id"], json.dumps(event["tool_input"])),
+        )
+        decision = "ask"
+        output = {"hookSpecificOutput": {
+            "hookEventName": "PreToolUse", "permissionDecision": "ask", "approvalId": approval_id,
+        }}
+
+    # This row is written on EVERY decision, allow or ask — the audit
+    # trail exists even when nothing gets blocked.
+    cur.execute(
+        "INSERT INTO audit_log (session_id, tool_name, tool_input, decision) VALUES (%s,%s,%s,%s)",
+        (event["session_id"], event["tool_name"], json.dumps(event["tool_input"]), decision),
+    )
+    conn.commit()
+    print(json.dumps(output))
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 1 — frontend: an approval queue fed over the same SSE pattern as token streaming (React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React approval queue</button></div>
+  <div class="tab-panel">
+<pre><code>function ApprovalQueue() {
+  const [pending, setPending] = useState<Approval[]>([]);
+
+  useEffect(() => {
+    // Same SSE mechanics as agent token streaming — see "Streaming Agent
+    // Output to the Browser" for the reconnect/Last-Event-ID protocol this
+    // stream should also implement; not repeated here.
+    const es = new EventSource("/approvals/stream");
+    es.addEventListener("approval.pending", (e) => {
+      setPending((p) => [...p, JSON.parse((e as MessageEvent).data)]);
+    });
+    es.addEventListener("approval.resolved", (e) => {
+      const { approvalId } = JSON.parse((e as MessageEvent).data);
+      setPending((p) => p.filter((a) => a.id !== approvalId));
+    });
+    return () => es.close();
+  }, []);
+
+  async function decide(id: string, decision: "allow" | "deny") {
+    await fetch(`/approvals/${id}`, {
+      method: "POST",
+      headers: { "Idempotency-Key": id }, // one decision per approval —
+      body: JSON.stringify({ decision }),  // see Tool Design as API Design
+    });
+  }
+
+  return (
+    <ul className="approval-queue">
+      {pending.map((a) => (
+        <li key={a.id}>
+          <p>{a.tool_name} — wire ${a.tool_input.amount} to {a.tool_input.account}</p>
+          <button onClick={() => decide(a.id, "allow")}>Approve</button>
+          <button onClick={() => decide(a.id, "deny")}>Deny</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+</code></pre>
+  </div>
+</div>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>The hook crashes and the harness treats that as non-blocking.</strong> A typo or unhandled exception in <code>policy_gate.py</code> exits with code <code>1</code>, not <code>2</code> — and per the exit-code contract, any code other than 0 or 2 is a non-blocking error in most implementations: the tool proceeds. Symptom: the transfer executes, but the <code>audit_log</code> table has no matching row, because the script died before its <code>INSERT</code>. A blank spot in the audit trail, not an error banner, is the tell — which is why the harness snippet in §3 explicitly overrides that default to fail closed.</li>
+<li><strong>A second path reaches the same effect without the hook.</strong> The <code>wire_transfer</code> capability is also exposed as a standalone MCP server that a different team's agent — or a batch job — calls directly, outside the harness that wires up <code>PreToolUse</code>. Symptom: the ledger shows a transfer with no corresponding decision row in <code>audit_log</code> at all, from a <code>session_id</code> the policy database has never seen. The gate only holds for every caller that actually passes through it.</li>
+<li><strong>The "ask" path stalls and there's no fail-closed timeout.</strong> The approval-queue frontend drops its SSE connection, or the human on the other end is simply away, and <code>wait_for_human_approval</code> blocks forever. Symptom: a trace shows one tool call "pending approval" for hours while the rest of the session is otherwise idle, and on-call gets paged for a session that looks hung rather than one that's correctly waiting — the fix is an explicit timeout that resolves to <code>deny</code>, never to <code>allow</code>.</li>
+<li><strong><code>updatedInput</code> rewrites the call silently.</strong> A hook that clamps or redacts an argument (e.g., capping the amount) before execution is powerful, but if the model isn't told, its own summary to the user — "I've wired $48,500" — no longer matches what actually executed. Symptom: the user-facing transcript and the ledger disagree, and support tickets read like a bug in the payments integration when the root cause is an un-surfaced policy rewrite.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — hook-level policy vs. in-tool validation</div>
+<p>Reach for a hook-level policy layer when the constraint is an organizational policy that must hold no matter what survives in the model's context — compaction, prompt injection, a long session — and needs to apply identically everywhere that effect is reachable, including paths the tool's own code doesn't control (a second MCP server, a batch job). The threshold's owner is compliance, not the payments team, and they should be able to change it without a code review of <code>wire_transfer</code>.</p>
+<p>Stay with in-tool validation — the kind <a href="tool-design-as-api-design.html">Tool Design as API Design</a> covers — when the constraint is intrinsic to the tool's own correctness and doesn't change independently of the code: amounts can't be negative, account numbers must match a format, a currency code must be valid. Those are structural guarantees the tool's author owns forever; they don't need a separate, swappable policy layer, and building one for them is solving a problem that isn't there.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> stand up the policy gate from §3 behind a real database, prove the allow/ask/deny paths with <code>curl</code>, and reproduce failure mode 1 on purpose.</p>
+<ol>
+<li>Run Postgres locally: <code>docker run -d --name pg -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:16</code>, then create <code>policies (tool_name text primary key, threshold_cents int)</code>, <code>audit_log (id serial, session_id text, tool_name text, tool_input jsonb, decision text, created_at timestamptz default now())</code>, and <code>pending_approvals (id text primary key, session_id text, tool_input jsonb, decision text)</code>. Seed <code>policies</code> with <code>('wire_transfer', 1000000)</code> ($10,000).</li>
+<li>Wrap §3's <code>call_tool</code>/<code>policy_gate.py</code> logic in a small Flask endpoint: <code>POST /agent/tool-call</code> takes <code>{tool_name, tool_input, session_id}</code>, runs the gate inline (no subprocess needed for the lab), and returns either the executed result or <code>{"status":"pending_approval","approvalId":...}</code>.</li>
+<li><code>curl -X POST localhost:5000/agent/tool-call -H "Content-Type: application/json" -d '{"tool_name":"wire_transfer","tool_input":{"amount":500,"account":"acct_1"},"session_id":"s1"}'</code> — confirm it executes immediately and <code>audit_log</code> gains one row with <code>decision='allow'</code>.</li>
+<li>Repeat with <code>"amount":48500</code> — confirm you get back <code>pending_approval</code> with an <code>approvalId</code>, and <code>audit_log</code> gains a row with <code>decision='ask'</code>.</li>
+<li><code>curl -X POST localhost:5000/approvals/&lt;approvalId&gt; -d '{"decision":"deny"}'</code> — confirm no row appears in a <code>transfers</code> ledger table for that call.</li>
+<li>Now break the gate on purpose: make <code>policy_gate.py</code> raise an unhandled exception (e.g., typo the column name) and call the endpoint again with <code>amount=48500</code>. If your harness code matches §3's snippet, it fails closed (denied); comment out the fail-closed override and confirm the call now executes with no <code>audit_log</code> row — that's failure mode 1, reproduced deliberately.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ An amount at or under the threshold executes and logs exactly one <code>audit_log</code> row with <code>decision='allow'</code>.</li>
+<li>✅ An amount over the threshold never touches the <code>transfers</code> table until a human decision is recorded, and logs <code>decision='ask'</code>.</li>
+<li>✅ With the fail-closed override removed, a crashing hook lets the over-threshold transfer execute with zero matching <code>audit_log</code> rows — proving the gap is real, not hypothetical.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A teammate proposes moving the $10,000 threshold out of the hook and into the <code>wire_transfer</code> function itself, arguing it's simpler — one less moving part to deploy and reason about. What's wrong with that, and what would you say?</strong></p>
+<p><em>Strong answer sketch: the threshold is a compliance policy with its own owner and its own change cadence, decoupled from the payments code's own release cycle — folding it into the tool means every policy tweak now requires a code review and deploy of a system that shouldn't need to change just because a number did. It also breaks the moment the same effect is reachable a second way: if <code>wire_transfer</code>'s underlying capability is also exposed as an MCP server another team calls directly, or as a batch job, the check baked into one code path does nothing for the others — a policy duplicated per caller inevitably drifts out of sync. A hook-style layer sits at the one point every path to that effect must cross, which is the actual definition of "the point of highest leverage" for a constraint like this. This is the same "agent proposes, deterministic engine disposes" boundary from <a href="tool-design-as-api-design.html">Tool Design as API Design</a>'s design-review answer — there, the deterministic engine owned request identity; here it owns the yes/no decision — and in both cases the reason is the same: the property being enforced has to hold consistently, and consistency isn't something you can delegate to code whose job is something else entirely.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://code.claude.com/docs/en/hooks">Claude Code — Hooks reference</a> (the <code>PreToolUse</code>/<code>PostToolUse</code> event contract, exit-code semantics, and <code>permissionDecision</code>/<code>updatedInput</code> fields this article's mechanism section is drawn from)</li>
+<li><a href="https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation">Model Context Protocol — Elicitation</a> (the protocol-level primitive for a server to request human input mid-call, the MCP-native analog to the "ask" path in §3)</li>
+<li><a href="https://www.openpolicyagent.org/docs/latest/">Open Policy Agent — Documentation</a> (the broader policy-as-code precedent for keeping authorization decisions out of application code and in a centrally owned, independently deployable layer)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-18 · Volatile: the exact hook event names, exit-code table, and JSON field names in §3 are Claude Code's current implementation and were verified against its live docs on this date — other harnesses (LangGraph interrupts, custom middleware) implement the same pattern under different names and contracts, and Claude Code's own hook surface has grown quickly (32 events as of this writing) and may add or rename fields in a future revision. Stable: the underlying idea — a deterministic gate external to the model's context — is not expected to change.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: Pillar 4's MCP-security article (tool poisoning and confused-deputy attacks are exactly what a well-placed <code>PreToolUse</code> gate can catch even when the tool description itself is compromised) and Pillar 7's human-in-the-loop approval UX article (the approval queue in §3 is a minimal version of a much larger UX problem — diff views, blast-radius previews, timeout policies people won't rubber-stamp). Pairs with <a href="tool-design-as-api-design.html">Tool Design as API Design</a> — that article's idempotency contract and this article's policy gate are complementary layers guarding the same tool call for different reasons.</p>
+
+<nav class="pager">
+  <a href="tool-design-as-api-design.html">← PREV — Tool Design as API Design</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
