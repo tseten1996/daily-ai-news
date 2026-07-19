@@ -136,6 +136,10 @@ positions, then commit to a judgment with reasoning.
 1. Verify: open the changed pages in the headless browser (Playwright is preinstalled;
    chromium lives under `/opt/pw-browsers/`); confirm no console errors, nav works
    (board → article, graph node → module, tabs switch), and take a screenshot.
+1a. If this run published a new page (article, module, or index page), add a matching
+    `<url>` entry (with an accurate `<lastmod>`) to `sitemap.xml` at the repo root —
+    the same way `articles/LEDGER.md` gets a new line. `sitemap.xml` is hand-maintained;
+    nothing else adds this entry for you.
 2. `git add -A && git commit` with message:
    `Daily run <YYYY-MM-DD>: trends — <topics>; manual — Module NN <title>`
 3. Push to the designated branch (see the session's branch instructions; do not push to
