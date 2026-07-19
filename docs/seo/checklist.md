@@ -1,8 +1,13 @@
 # SEO Checklist
 
-Last reviewed: 2026-07-17 (bootstrap run). State as found — nothing fixed
-yet (bootstrap runs make no code changes). See
-`docs/technical-debt/backlog.md` #1-3 for the corresponding backlog items.
+Last reviewed: 2026-07-17 (Astro pilot added — see ADR-0001). The table
+below reflects the **legacy pages** (`index.html`, `manual/*.html`, and
+the 3 already-published `articles/*.html` files) — none of which are
+covered by the Astro pilot yet. **Any new article authored through
+`site/`** (once deployed) gets every row marked ❌ below for free, via
+`site/src/layouts/BaseLayout.astro` — see `docs/technical-debt/backlog.md`
+#1 for details. See `docs/technical-debt/backlog.md` #1-3, #9 for the
+corresponding backlog items.
 
 | Item | Status | Notes |
 |---|---|---|

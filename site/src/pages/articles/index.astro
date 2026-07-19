@@ -1,0 +1,48 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const entries = (await getCollection('articles', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
+);
+---
+<BaseLayout title="Articles" description="Full-stack agentic engineering articles, pillar-organized, mechanism-level depth every time." path="/articles/">
+  <div class="wrap">
+    <nav class="topbar">
+      <a href="/">&larr; Home</a>
+      <span>THE DAILY AI NEWS · ARTICLES</span>
+    </nav>
+    <header class="site">
+      <h1>Articles</h1>
+    </header>
+    {entries.map((entry) => (
+      <a class="card" href={`/articles/${entry.id}/`}>
+        <span class="kicker mono">{entry.data.pillar} · {entry.data.difficulty}</span>
+        <h2>{entry.data.title}</h2>
+        <p>{entry.data.description}</p>
+        <div class="meta mono">PUBLISHED {entry.data.publishDate.toISOString().slice(0, 10)} · ~{entry.data.readTime}</div>
+      </a>
+    ))}
+  </div>
+</BaseLayout>
+
+<style>
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink); text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  header.site { padding: 2.2rem 0 1rem; }
+  header.site h1 { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: clamp(1.6rem, 4.5vw, 2.3rem); margin: 0; }
+  .card {
+    display: block; margin: 1.4rem 0; padding: 1.3rem 1.5rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    text-decoration: none; color: var(--ink);
+  }
+  .card:hover { border-color: var(--accent); }
+  .card .kicker { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+  .card h2 { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 1.15rem; margin: .4rem 0; }
+  .card p { margin: 0; color: var(--muted); font-size: .92rem; }
+  .card .meta { font-size: .7rem; color: var(--muted); margin-top: .6rem; }
+</style>

@@ -1,0 +1,62 @@
+---
+import BaseLayout from './BaseLayout.astro';
+
+export interface Props {
+  title: string;
+  description: string;
+  path: string;
+  pillar: string;
+  difficulty: string;
+  publishDate: Date;
+  readTime: string;
+  tags: string[];
+}
+
+const { title, description, path, pillar, difficulty, publishDate, readTime, tags } = Astro.props;
+
+const isoDate = publishDate.toISOString().slice(0, 10);
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BlogPosting',
+  headline: title,
+  description,
+  datePublished: isoDate,
+  keywords: tags.join(', '),
+};
+---
+<BaseLayout title={title} description={description} path={path} ogType="article" jsonLd={jsonLd}>
+  <div class="wrap">
+    <nav class="topbar">
+      <a href="/articles/">&larr; Articles</a>
+      <span>THE DAILY AI NEWS</span>
+    </nav>
+    <header class="article-head">
+      <p class="kicker mono">{pillar} · {difficulty}</p>
+      <h1>{title}</h1>
+      <p class="meta mono">PUBLISHED {isoDate} · ~{readTime}</p>
+    </header>
+    <article>
+      <slot />
+    </article>
+  </div>
+</BaseLayout>
+
+<style>
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink); text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+  .article-head { padding: 2rem 0 1.2rem; }
+  .kicker {
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 0 0 .5rem;
+  }
+  .article-head h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.3rem); letter-spacing: -.02em; margin: 0 0 .5rem;
+  }
+  .meta { font-size: .7rem; color: var(--muted); margin: 0; }
+</style>
