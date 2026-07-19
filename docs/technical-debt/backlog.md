@@ -23,10 +23,16 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    real `<meta description>` + canonical + OG/Twitter tags per page first
    (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
    article/module page as a follow-up slice.
-2. **OPEN — No `robots.txt` or `sitemap.xml`.** Neither file exists at the
-   repo root. Crawlers have no sitemap to discover the ~19 content pages
-   (16 trend topics live inside one `index.html`, but articles and manual
-   modules are discrete URLs that benefit from a sitemap).
+2. **DONE (2026-07-18)** — `robots.txt` and a hand-maintained
+   `sitemap.xml` added at the repo root, listing all 13 published pages
+   (Trends Board, both index pages, 4 articles, 6 published modules).
+   `robots.txt` disallows `/docs/` (the architecture-review knowledge
+   base, not blog content) and points at the sitemap. Both are plain
+   static files served as-is by the existing GitHub Pages deploy
+   workflow — no tooling introduced. Follow-up: the sitemap must be
+   updated by hand whenever a page is added/removed (see maintenance
+   note in `docs/seo/checklist.md`) until/unless the tooling ADR (item 6
+   below) decides to generate it instead.
 3. **OPEN — No RSS/Atom feed.** Domain standards call for an RSS feed for
    a blog platform; none exists. Would need a decision on whether it's
    hand-maintained XML (consistent with the no-build-step philosophy) or
@@ -49,17 +55,26 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
 ## Priority 7 — Architecture health
 
-6. **OPEN — No build, lint, type-check, or CI pipeline at all.** No
-   `package.json`, no linter config (no HTML/CSS lint), no CI workflow
-   files under `.github/workflows/`. This repo currently has *nothing*
-   for the "verify before PR" step in the agent's non-negotiable safety
-   rules to run beyond manual inspection. This is the most foundational
-   gap: every other quality gate (accessibility CI, SEO validation,
-   broken-link checking) is blocked on deciding whether to introduce
-   *any* tooling at all, and if so, how to do it without violating the
-   "no build step, fully self-contained pages" design principle the
-   content-authoring spec (`SCHEDULED_TASK_PROMPT.md`) explicitly relies
-   on. This needs an ADR before any tooling is introduced — see roadmap.
+6. **OPEN — No build, lint, type-check, or test CI pipeline.** A deploy
+   workflow now exists (`.github/workflows/deploy-pages.yml`, added
+   between the 2026-07-17 and 2026-07-18 runs) that publishes the repo
+   to GitHub Pages on push to `main` — but it only uploads and deploys
+   static files verbatim; it runs no lint, no HTML validation, no
+   link-checking, no accessibility check, and no test of any kind. No
+   `package.json`, no linter config, still no `.github/workflows/*test*`.
+   This repo has *nothing* for the "verify before PR" step in the agent's
+   non-negotiable safety rules to run beyond manual inspection. This is
+   the most foundational gap: every other quality gate (accessibility CI,
+   SEO validation, broken-link checking) is blocked on deciding whether
+   to introduce *any* verification tooling, and if so, how to do it
+   without violating the "no build step, fully self-contained pages"
+   design principle the content-authoring spec
+   (`SCHEDULED_TASK_PROMPT.md`) explicitly relies on — note that a
+   verify-only CI step (e.g. an HTML validator or link checker that runs
+   in CI but changes nothing about what ships) would *not* violate that
+   principle, since the served artifact is untouched; that distinction
+   should be central to the ADR. Needs an ADR before any tooling is
+   introduced — see roadmap.
 7. **OPEN — Significant CSS/JS duplication across every page.** Each of
    the 12 HTML files independently redefines the same category of design
    tokens (paper/ink/accent/border custom properties, similar dark-mode

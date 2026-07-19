@@ -1,17 +1,17 @@
 # Roadmap
 
-Last reviewed: 2026-07-17 (bootstrap run). Reflects the initial audit in
+Last reviewed: 2026-07-18. Reflects the audit in
 `docs/technical-debt/backlog.md`. Re-prioritize as runs land.
 
 ## Immediate (next 1-3 runs)
 
 - **Add real SEO meta tags per page** (backlog #1, slice a): unique
   `<meta name="description">`, `rel="canonical"`, Open Graph, and Twitter
-  Card tags on `index.html`, `articles/*.html`, and `manual/*.html`.
-  Mechanical, low-risk, high-value — good first non-bootstrap task.
-- **Add `robots.txt` and a hand-maintained `sitemap.xml`** (backlog #2).
-  Consistent with the no-build-step philosophy; can be maintained the same
-  way `articles/LEDGER.md` is — updated by each run that adds a page.
+  Card tags on `index.html`, `articles/*.html`, and `manual/*.html` (13
+  pages total — likely needs its own slicing across 2 runs to stay under
+  the ~10-file-per-run guideline). Mechanical, low-risk, high-value —
+  now the top open SEO item since `robots.txt`/`sitemap.xml` landed
+  2026-07-18.
 - **Fix Trends Board heading hierarchy** (backlog #4): confirm intended
   outline, close the h2→h4 gap.
 

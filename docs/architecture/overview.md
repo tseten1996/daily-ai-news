@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-17 (bootstrap run)
+Last reviewed: 2026-07-18
 
 ## What this repository is
 
@@ -21,23 +21,28 @@ tree).
   uses `prefers-color-scheme` media queries only.
 - **Build pipeline:** none. There is no bundler, no transpiler, no minifier.
   The files in the repo are exactly what a browser receives.
-- **Hosting:** not defined in-repo (no CI/CD config, no deploy workflow
-  found). Presumed static hosting (e.g. GitHub Pages) but not confirmed.
-- **Tests:** none exist. No test runner, no Playwright config, no CI
-  workflow files (`.github/workflows/` does not exist).
+- **Hosting:** GitHub Pages, deployed by
+  `.github/workflows/deploy-pages.yml` on every push to `main` (uploads
+  the repo root verbatim — no build step in the pipeline either).
+- **Tests:** none exist. No test runner, no Playwright config, and the
+  one CI workflow that exists only deploys — it runs no lint, no test,
+  and no validation of any kind.
 
 ## Repository layout
 
 ```
 index.html              Trends Board — home page, bookmark-card UI of daily AI trend topics
+robots.txt              Crawler policy; points at sitemap.xml (added 2026-07-18)
+sitemap.xml             Hand-maintained sitemap of all published pages (added 2026-07-18)
 articles/                Long-form article stream ("The Daily AI News")
   index.html             Article listing page
   LEDGER.md              Append-only dedup ledger of published articles (topic/date/concepts)
   <slug>.html            One file per published article, self-contained
 manual/                  "The Agentic Systems Field Manual" — a 16-module curriculum
   index.html             Manual home: dependency graph (SVG) + site-map cards + module statuses
-  module-NN.html         One file per published module (00 published as reference format)
+  module-NN.html         One file per published module (00-05 published so far)
 SCHEDULED_TASK_PROMPT.md Operating spec for the daily content-generation agent run
+.github/workflows/       deploy-pages.yml — deploys repo root to GitHub Pages on push to main
 docs/                    This knowledge base (architecture-review agent's memory)
 ```
 
@@ -72,7 +77,7 @@ docs/                    This knowledge base (architecture-review agent's memory
 - A newer, third content stream ("pillar"-organized full-stack agentic
   engineering articles), tracked via `articles/LEDGER.md` for dedup by
   topic/concept rather than exact title match.
-- As of this review: 2 articles published.
+- As of this review: 4 articles published.
 
 ## Data flow
 
@@ -95,13 +100,15 @@ card-rendering script; module pages' tab-switching JS).
 
 ## Build & deploy pipeline
 
-None exists today. There is no `package.json`, no lockfile, no CI
-workflow, no linter config, and no test runner anywhere in the repository.
-"Verification" for the daily content-authoring run is manual/agent-driven
-(opening pages in a headless browser via Playwright per
-`SCHEDULED_TASK_PROMPT.md`'s "Finish every run" section), not an automated
-gate. This is a significant gap from a stewardship standpoint — see
-`docs/technical-debt/backlog.md`.
+No build step: there is no `package.json`, no lockfile, no linter config,
+and no test runner anywhere in the repository. A single CI workflow
+(`.github/workflows/deploy-pages.yml`) deploys the repo root to GitHub
+Pages verbatim on every push to `main` — it performs no build, lint, or
+test step of any kind before deploying. "Verification" for the daily
+content-authoring run is manual/agent-driven (opening pages in a headless
+browser via Playwright per `SCHEDULED_TASK_PROMPT.md`'s "Finish every run"
+section), not an automated gate. This is a significant gap from a
+stewardship standpoint — see `docs/technical-debt/backlog.md` #6.
 
 ## Notable conventions worth preserving
 
