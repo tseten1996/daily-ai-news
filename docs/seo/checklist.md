@@ -1,6 +1,6 @@
 # SEO Checklist
 
-Last reviewed: 2026-07-18. See `docs/technical-debt/backlog.md` #1-3 for
+Last reviewed: 2026-07-19. See `docs/technical-debt/backlog.md` #1-3 for
 the corresponding backlog items.
 
 | Item | Status | Notes |
@@ -26,6 +26,18 @@ entry (with an accurate `<lastmod>`) to `sitemap.xml`, the same way
 `articles/LEDGER.md` is updated on every new article. This checklist and
 `docs/technical-debt/backlog.md` should flag it as stale if a run adds
 content without updating the sitemap.
+
+**This already happened once:** the 2026-07-19 daily content run published
+`articles/no-framework-200-line-harness.html` (correctly wired into
+`articles/index.html` and `articles/LEDGER.md`) but did not add it to
+`sitemap.xml` — the content-authoring spec (`SCHEDULED_TASK_PROMPT.md`)
+doesn't currently mention the sitemap at all. The architecture-review run
+later the same day caught and fixed the gap. Since this is a real,
+recurring risk (a new page ships with zero window where it's both live
+and in the sitemap), the durable fix is to add a `sitemap.xml` update
+step to `SCHEDULED_TASK_PROMPT.md`'s own "finish every run" checklist
+rather than relying on the architecture-review agent to catch it after
+the fact — tracked as backlog item 10.
 
 ## Priority for fixes
 

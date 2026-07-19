@@ -8,9 +8,15 @@
   </url>
   <url>
     <loc>https://tseten1996.github.io/daily-ai-news/articles/</loc>
-    <lastmod>2026-07-18</lastmod>
+    <lastmod>2026-07-19</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://tseten1996.github.io/daily-ai-news/articles/no-framework-200-line-harness.html</loc>
+    <lastmod>2026-07-19</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://tseten1996.github.io/daily-ai-news/articles/tool-design-as-api-design.html</loc>

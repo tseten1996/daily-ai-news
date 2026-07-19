@@ -23,16 +23,16 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    real `<meta description>` + canonical + OG/Twitter tags per page first
    (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
    article/module page as a follow-up slice.
-2. **DONE (2026-07-18)** — `robots.txt` and a hand-maintained
-   `sitemap.xml` added at the repo root, listing all 13 published pages
-   (Trends Board, both index pages, 4 articles, 6 published modules).
-   `robots.txt` disallows `/docs/` (the architecture-review knowledge
-   base, not blog content) and points at the sitemap. Both are plain
-   static files served as-is by the existing GitHub Pages deploy
-   workflow — no tooling introduced. Follow-up: the sitemap must be
-   updated by hand whenever a page is added/removed (see maintenance
-   note in `docs/seo/checklist.md`) until/unless the tooling ADR (item 6
-   below) decides to generate it instead.
+2. **DONE (2026-07-18, follow-up fixed 2026-07-19)** — `robots.txt` and a
+   hand-maintained `sitemap.xml` added at the repo root. Follow-up: the
+   sitemap must be updated by hand whenever a page is added/removed (see
+   maintenance note in `docs/seo/checklist.md`) until/unless the tooling
+   ADR (item 6 below) decides to generate it instead. **This already
+   happened**: the 2026-07-19 daily content run published a new article
+   without a matching sitemap entry; the same day's architecture-review
+   run caught and fixed it, and added a step to
+   `SCHEDULED_TASK_PROMPT.md`'s "finish every run" checklist so the
+   content-authoring run keeps the sitemap current itself going forward.
 3. **OPEN — No RSS/Atom feed.** Domain standards call for an RSS feed for
    a blog platform; none exists. Would need a decision on whether it's
    hand-maintained XML (consistent with the no-build-step philosophy) or
@@ -105,6 +105,32 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    bootstrap run created it (`docs/architecture/overview.md`,
    `docs/roadmap/roadmap.md`, this backlog, and the empty-but-structured
    remaining KB files). No code changed.
+10. **OPEN — An SPA-migration decision (ADR-0001, Astro pilot) landed on a
+    PR but never reached `main`, and is now undocumented on `main`.**
+    Discovered while orienting for the 2026-07-19 run: PR #6 ("Add Astro
+    pilot for the Articles stream (ADR-0001)") was merged, but its base
+    branch was `claude/daily-ai-trends-tutorial-txft7z` — an old
+    feature-line branch, not `main` — because several earlier PRs (#1-#6)
+    were chained against that branch instead of the true default branch.
+    `main` has since moved on independently (deploy workflow, robots.txt/
+    sitemap, new articles) and does not contain `site/` (the Astro
+    scaffold) or `docs/decisions/ADR-0001-adopt-astro-for-spa-migration.md`
+    — only `docs/decisions/README.md` exists on `main` today. The commit
+    history for that work still exists (reachable via
+    `origin/claude/daily-ai-trends-tutorial-txft7z` at commit `281cff4`),
+    so nothing is destroyed, but the architectural decision it recorded is
+    currently invisible to anyone reading `docs/` on `main`, and a future
+    run has no way to know an SPA pilot was ever evaluated unless it reads
+    this note. Not fixing this today — reviving a multi-file Astro
+    scaffold and an architectural ADR is exactly the kind of decision that
+    needs deliberate human/agent judgment about intent, not a mechanical
+    doc sync. Recommended next step: a future run (or the repo owner)
+    should decide whether to (a) re-open a PR that ports the Astro pilot
+    onto current `main`, (b) formally supersede ADR-0001 with a new ADR
+    documenting that the SPA migration was shelved, or (c) at minimum,
+    recreate `docs/decisions/ADR-0001-adopt-astro-for-spa-migration.md` on
+    `main` from the PR #6 diff so the decision is at least documented even
+    if the code isn't merged.
 
 ## Notes / non-issues found during audit
 

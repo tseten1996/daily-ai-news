@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-19
 
 ## What this repository is
 
@@ -77,7 +77,7 @@ docs/                    This knowledge base (architecture-review agent's memory
 - A newer, third content stream ("pillar"-organized full-stack agentic
   engineering articles), tracked via `articles/LEDGER.md` for dedup by
   topic/concept rather than exact title match.
-- As of this review: 4 articles published.
+- As of this review: 5 articles published.
 
 ## Data flow
 

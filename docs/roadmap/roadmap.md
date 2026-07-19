@@ -1,6 +1,6 @@
 # Roadmap
 
-Last reviewed: 2026-07-18. Reflects the audit in
+Last reviewed: 2026-07-19. Reflects the audit in
 `docs/technical-debt/backlog.md`. Re-prioritize as runs land.
 
 ## Immediate (next 1-3 runs)
@@ -27,6 +27,11 @@ Last reviewed: 2026-07-18. Reflects the audit in
   artifact), (b) accept a minimal dev-only tooling layer, (c) stay
   tooling-free and rely on agent-driven manual verification indefinitely.
   This blocks backlog items #5, #7, #8.
+- **Decide the fate of the orphaned Astro pilot / ADR-0001** (backlog
+  #10): the SPA-migration decision and scaffold merged into a stale
+  branch, not `main`, and is now undocumented on `main`. Needs a
+  deliberate call (revive, formally shelve via a superseding ADR, or at
+  least re-document), not a mechanical fix.
 
 ## Future
 
