@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-20
 
 ## What this repository is
 
@@ -77,7 +77,10 @@ docs/                    This knowledge base (architecture-review agent's memory
 - A newer, third content stream ("pillar"-organized full-stack agentic
   engineering articles), tracked via `articles/LEDGER.md` for dedup by
   topic/concept rather than exact title match.
-- As of this review: 5 articles published.
+- As of this review: 6 articles published. All 7 `articles/*.html` files
+  (the 6 articles plus `articles/index.html`) carry real SEO meta tags
+  (description, canonical, Open Graph, Twitter Card) as of 2026-07-20 —
+  see `docs/seo/checklist.md`.
 
 ## Data flow
 
