@@ -1,17 +1,17 @@
 # Roadmap
 
-Last reviewed: 2026-07-19. Reflects the audit in
+Last reviewed: 2026-07-20. Reflects the audit in
 `docs/technical-debt/backlog.md`. Re-prioritize as runs land.
 
 ## Immediate (next 1-3 runs)
 
-- **Add real SEO meta tags per page** (backlog #1, slice a): unique
-  `<meta name="description">`, `rel="canonical"`, Open Graph, and Twitter
-  Card tags on `index.html`, `articles/*.html`, and `manual/*.html` (13
-  pages total — likely needs its own slicing across 2 runs to stay under
-  the ~10-file-per-run guideline). Mechanical, low-risk, high-value —
-  now the top open SEO item since `robots.txt`/`sitemap.xml` landed
-  2026-07-18.
+- **Add real SEO meta tags to the remaining legacy pages** (backlog #1,
+  slice a continued): unique `<meta name="description">`,
+  `rel="canonical"`, Open Graph, and Twitter Card tags on `index.html`
+  (Trends Board) and `manual/*.html` (index + 6 modules) — 8 files total.
+  The `articles/*.html` family (7 files) was completed 2026-07-20;
+  mechanical, low-risk, high-value — same pattern, just applied to the
+  remaining two content streams.
 - **Fix Trends Board heading hierarchy** (backlog #4): confirm intended
   outline, close the h2→h4 gap.
 

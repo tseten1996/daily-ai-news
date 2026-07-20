@@ -1,18 +1,18 @@
 # SEO Checklist
 
-Last reviewed: 2026-07-19. See `docs/technical-debt/backlog.md` #1-3 for
+Last reviewed: 2026-07-20. See `docs/technical-debt/backlog.md` #1-3 for
 the corresponding backlog items.
 
 | Item | Status | Notes |
 |---|---|---|
 | Unique `<title>` per page | ✅ Present | Every page reviewed has a distinct, descriptive `<title>`. |
-| Real `<meta name="description">` | ❌ Missing | Present only inside HTML authoring-comments on some pages (not emitted as an actual tag). |
-| Canonical URLs (`rel="canonical"`) | ❌ Missing | Not found on any page. |
-| Sitemap (`sitemap.xml`) | ✅ Present (2026-07-18) | Hand-maintained at repo root, lists all 13 published pages. Update it whenever a page is added/removed — see maintenance note below. |
+| Real `<meta name="description">` | ⚠️ Partial (Articles done 2026-07-20) | Present and emitted on all 7 `articles/*.html` pages (reusing each page's existing front-matter-comment description verbatim). Still ❌ missing on `index.html` (Trends Board) and `manual/*.html` (7 files) — next slice. |
+| Canonical URLs (`rel="canonical"`) | ⚠️ Partial (Articles done 2026-07-20) | Present on all 7 `articles/*.html` pages, matching the URL convention already used in `sitemap.xml`. Still ❌ missing on `index.html` and `manual/*.html`. |
+| Sitemap (`sitemap.xml`) | ✅ Present (2026-07-18) | Hand-maintained at repo root, lists all 15 published pages. Update it whenever a page is added/removed — see maintenance note below. |
 | `robots.txt` | ✅ Present (2026-07-18) | At repo root: allows all crawlers, disallows `/docs/` (internal engineering knowledge base, not blog content), points to the sitemap. |
-| Open Graph tags | ❌ Missing | Not found on any page. |
-| Twitter Card tags | ❌ Missing | Not found on any page. |
-| JSON-LD structured data (Article/BlogPosting) | ❌ Missing | Not found on any page. |
+| Open Graph tags | ⚠️ Partial (Articles done 2026-07-20) | `og:type`/`og:title`/`og:description`/`og:url`/`og:site_name` present on all 7 `articles/*.html` pages. No `og:image` — the site has no images anywhere (text/SVG only), so it's correctly omitted rather than pointing at a missing asset. Still ❌ missing on `index.html` and `manual/*.html`. |
+| Twitter Card tags | ⚠️ Partial (Articles done 2026-07-20) | `twitter:card` (`summary` — no image available, so not `summary_large_image`), `twitter:title`, `twitter:description` present on all 7 `articles/*.html` pages. Still ❌ missing on `index.html` and `manual/*.html`. |
+| JSON-LD structured data (Article/BlogPosting) | ❌ Missing | Not found on any page. Deliberately out of scope for the 2026-07-20 slice (backlog #1 slice b) — do it once basic tags exist everywhere. |
 | RSS/Atom feed | ❌ Missing | Does not exist. |
 | Clean, crawlable URLs | ✅ Present | Static `.html` files, human-readable slugs (e.g. `articles/streaming-agent-output-to-the-browser.html`). |
 | Semantic heading structure | ⚠️ Partial | Trends Board skips heading levels (h2→h4); see accessibility audit. |
@@ -42,5 +42,6 @@ the fact — tracked as backlog item 10.
 ## Priority for fixes
 
 See `docs/roadmap/roadmap.md` "Immediate" section — real meta tags
-(description, canonical, Open Graph, Twitter Card) are next; JSON-LD
-follows once basic tags exist.
+(description, canonical, Open Graph, Twitter Card) are done for the
+Articles family (7 files); `index.html` and `manual/*.html` (8 files) are
+the next slice. JSON-LD follows once basic tags exist everywhere.

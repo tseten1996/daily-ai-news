@@ -10,21 +10,29 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
 ## Priority 5 — SEO
 
-1. **OPEN — No SEO metadata anywhere in the site.** Audited all HTML files
-   (`index.html`, `articles/*.html`, `manual/*.html`): zero real
-   `<meta name="description">` tags, zero Open Graph tags, zero Twitter
-   Card tags, zero `rel="canonical"` links, zero JSON-LD structured data.
-   Some pages carry a "meta description" value only inside an HTML
-   *comment* (front-matter for future authoring runs) — it is never
-   emitted as an actual `<meta>` tag, so it has no SEO effect today. This
-   directly contradicts the platform's stated SEO goals (discoverability,
-   social sharing, Article/BlogPosting JSON-LD). High value, low risk —
-   good candidate for a near-term run. Likely needs splitting: (a) add
-   real `<meta description>` + canonical + OG/Twitter tags per page first
-   (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
-   article/module page as a follow-up slice.
+1. **PARTIALLY ADDRESSED (2026-07-20) — slice a, Articles family only.**
+   Audited all HTML files (`index.html`, `articles/*.html`,
+   `manual/*.html`): zero real `<meta name="description">` tags, zero Open
+   Graph tags, zero Twitter Card tags, zero `rel="canonical"` links, zero
+   JSON-LD structured data. Some pages carried a "meta description" value
+   only inside an HTML *comment* (front-matter for future authoring runs)
+   — never emitted as an actual `<meta>` tag, so it had no SEO effect.
+   **Fixed for all 7 `articles/*.html` pages** (the 6 published articles
+   plus `articles/index.html`): each now emits a real
+   `<meta name="description">` (reusing the front-matter comment's
+   already-drafted description verbatim where one existed), a
+   `rel="canonical"` link matching the URL convention already established
+   in `sitemap.xml`, `og:type`/`og:title`/`og:description`/`og:url`/
+   `og:site_name`, and `twitter:card` (`summary` — no `summary_large_image`
+   since the site has no images anywhere to point at) +
+   `twitter:title`/`twitter:description`. **Still open** for `index.html`
+   (Trends Board, 1 file) and `manual/*.html` (7 files, index + 6
+   modules) — 8 files total, the next slice, within the ~10-file-per-run
+   guideline. JSON-LD Article/BlogPosting schema remains a separate
+   follow-up slice (b) once basic tags exist everywhere.
 2. **DONE (2026-07-18, follow-up fixed 2026-07-19)** — `robots.txt` and a
-   hand-maintained `sitemap.xml` added at the repo root. Follow-up: the
+   hand-maintained `sitemap.xml` added at the repo root (now lists 15
+   pages, current as of the 2026-07-20 review). Follow-up: the
    sitemap must be updated by hand whenever a page is added/removed (see
    maintenance note in `docs/seo/checklist.md`) until/unless the tooling
    ADR (item 6 below) decides to generate it instead. **This already
