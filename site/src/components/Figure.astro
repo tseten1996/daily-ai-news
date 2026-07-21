@@ -1,0 +1,25 @@
+---
+export interface Props {
+  caption: string;
+  mermaidSrc?: string;
+}
+
+const { caption, mermaidSrc } = Astro.props;
+---
+<figure class="fig">
+  <slot />
+  <figcaption class="mono">{caption}</figcaption>
+  {mermaidSrc && (
+    <details class="mermaid-src">
+      <summary class="mono">Mermaid source</summary>
+      <pre><code set:text={mermaidSrc} /></pre>
+    </details>
+  )}
+</figure>
+
+<style>
+  .fig { margin: 1.6rem 0; padding: 1.1rem; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+  .fig figcaption { margin-top: .6rem; font-size: .72rem; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
+  .mermaid-src { margin-top: .6rem; font-size: .78rem; color: var(--muted); }
+  .mermaid-src pre { overflow-x: auto; }
+</style>

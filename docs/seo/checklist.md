@@ -1,14 +1,21 @@
 # SEO Checklist
 
-Last reviewed: 2026-07-19. See `docs/technical-debt/backlog.md` #1-3 for
-the corresponding backlog items.
+Last reviewed: 2026-07-21 (reconciled the Astro pilot branch — see
+ADR-0001 — into this branch's history). The table below reflects the
+**legacy pages** (`index.html`, `manual/*.html`, and all 7
+already-published `articles/*.html` files) — none of which are covered by
+the Astro pilot yet. **Any new article authored through `site/`** (once
+deployed) gets every row marked ❌ below for free, via
+`site/src/layouts/BaseLayout.astro` — see `docs/technical-debt/backlog.md`
+#1 for details. See `docs/technical-debt/backlog.md` #1-3, #9 for the
+corresponding backlog items.
 
 | Item | Status | Notes |
 |---|---|---|
 | Unique `<title>` per page | ✅ Present | Every page reviewed has a distinct, descriptive `<title>`. |
 | Real `<meta name="description">` | ❌ Missing | Present only inside HTML authoring-comments on some pages (not emitted as an actual tag). |
 | Canonical URLs (`rel="canonical"`) | ❌ Missing | Not found on any page. |
-| Sitemap (`sitemap.xml`) | ✅ Present (2026-07-18) | Hand-maintained at repo root, lists all 13 published pages. Update it whenever a page is added/removed — see maintenance note below. |
+| Sitemap (`sitemap.xml`) | ✅ Present (2026-07-18) | Hand-maintained at repo root, lists all 16 published pages (verified 2026-07-21). Update it whenever a page is added/removed — see maintenance note below. |
 | `robots.txt` | ✅ Present (2026-07-18) | At repo root: allows all crawlers, disallows `/docs/` (internal engineering knowledge base, not blog content), points to the sitemap. |
 | Open Graph tags | ❌ Missing | Not found on any page. |
 | Twitter Card tags | ❌ Missing | Not found on any page. |

@@ -1,0 +1,85 @@
+---
+export interface Props {
+  title: string;
+  description: string;
+  /** Path relative to the site root, e.g. "/articles/example-post/" */
+  path: string;
+  ogType?: 'website' | 'article';
+  /** Arbitrary JSON-LD object (e.g. an Article/BlogPosting schema) — omitted if not provided. */
+  jsonLd?: Record<string, unknown>;
+}
+
+const { title, description, path, ogType = 'website', jsonLd } = Astro.props;
+
+const canonicalURL = new URL(path, Astro.site);
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📰</text></svg>" />
+  <title>{title} · The Daily AI News</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={canonicalURL} />
+
+  <meta property="og:type" content={ogType} />
+  <meta property="og:site_name" content="The Daily AI News" />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:url" content={canonicalURL} />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+
+  {jsonLd && (
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  )}
+
+  <style is:global>
+    :root {
+      --paper: #f4f3ee;
+      --grid: rgba(30, 60, 110, .055);
+      --ink: #1b2430;
+      --muted: #5d6674;
+      --accent: #0e63d0;
+      --accent-soft: rgba(14, 99, 208, .09);
+      --panel: #ffffff;
+      --border: #d8d6cc;
+      --code-bg: #101720;
+      --code-text: #dce6f2;
+      --warn: #a03d0e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #0d1420;
+        --grid: rgba(120, 170, 255, .06);
+        --ink: #dfe6ef;
+        --muted: #8b95a5;
+        --accent: #58a2f5;
+        --accent-soft: rgba(88, 162, 245, .12);
+        --panel: #131c2b;
+        --border: #263349;
+        --code-bg: #0a0f17;
+        --code-text: #cfe0f2;
+        --warn: #e2703a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background-color: var(--paper);
+      color: var(--ink);
+      font-family: Georgia, 'Times New Roman', serif;
+      line-height: 1.6;
+    }
+    .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+    a { color: var(--accent); }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  </style>
+</head>
+<body>
+  <slot />
+</body>
+</html>
