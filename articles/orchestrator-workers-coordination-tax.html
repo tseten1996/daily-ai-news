@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orchestrator-Workers and the Coordination Tax · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Orchestrator-Workers and the Coordination Tax
+  slug: orchestrator-workers-coordination-tax
+  pillar: Pillar 1 — Architectures
+  difficulty: Practitioner
+  series: none (standalone; sets up future Pillar 1 blackboard-coordination and event-driven-agent articles)
+  tags: orchestrator-workers, multi-agent, task-claiming, coordination-tax, concurrency, agent-architecture
+  meta description: Fanning out work to parallel worker agents isn't free — it trades wall-clock time for a coordination bill paid in lost updates, duplicated work, and stuck tasks unless you build real claiming, atomic result writes, and claim timeouts.
+  read time: ~10 min (~1,900 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · ARCHITECTURES</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 1 · Architectures</div>
+  <h1>Orchestrator-Workers and the Coordination Tax</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Fanning a task out to N worker agents doesn't just divide the work by N — it adds a bill for keeping those workers from stepping on each other. Skip paying it deliberately and you pay it anyway, in silently lost results.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-20</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~10 min (~1,900 words)</b></span>
+    <span>LAB <b>prove atomic task claiming under concurrency and reclaim a stuck task after timeout</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A platform team kicks off an overnight job: audit 40 microservices for hardcoded secrets, one worker agent per service, orchestrated to run in parallel so the whole sweep finishes before standup instead of taking all night sequentially. Each worker reads its service's source, writes its findings as an appended block to a shared <code>audit_findings.md</code> in object storage, and exits. The next morning the document has 31 entries, not 40. No worker logged an error; no task shows as failed. What happened is a lost update: nine workers finished inside the same two-second window, and the orchestrator's "append a finding" step was read the whole document, add my paragraph, write the whole document back — not a true append. Whichever worker in each finishing cluster wrote last overwrote the document state the others had just written into, discarding their findings along with it. Nothing in the architecture ever noticed two workers were mid-flight on the same read-modify-write at once, because nothing was watching for it.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>The instinct once an agent workload can be split — "summarize each of these 40 services," "review each of these 200 files" — is to spawn one worker per unit of work and let them run concurrently, because wall-clock time is the whole point of not doing it sequentially. Anthropic's own taxonomy names this the orchestrator-workers pattern: a central agent decomposes a task and dispatches the pieces to workers, then synthesizes their outputs. What that framing doesn't spell out is that workers touching any shared resource — a shared output document, a shared task list, a shared rate-limited API, a shared budget — turns "independent parallel work" into a concurrency problem indistinguishable from any other distributed system's, whether or not an LLM is involved anywhere in it.</p>
+<p>Before teams built real coordination, they mostly avoided the problem by construction: split work into a small, fixed number of shards known in advance, hardcode shard N to worker N, and never let two workers write to the same place. That works and it's simple, right up until the task count isn't known ahead of time (you're processing "every file matching a pattern" and won't know how many until you've scanned), or a worker can crash mid-task and something has to notice and retry it, or the shards are uneven enough that some workers finish in ten seconds and sit idle while one straggler runs for twenty minutes. At that point static assignment stops being enough, and you need the thing distributed systems have always needed for shared mutable state under concurrency: a way to atomically claim a unit of work, and a way to record a result without two writers clobbering each other.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>Replace both failure-prone habits from the cold open — a shared mutable document, and pushing task assignments out at spawn time — with two primitives borrowed straight from queue-backed job systems. First, workers <em>pull</em> and atomically <em>claim</em> a task row from a table, using a single conditional update that can only succeed for one caller even if a hundred fire at the identical instant — the same underlying database guarantee that makes <code>INSERT ... ON CONFLICT</code> race-free for idempotency keys in <a href="tool-design-as-api-design.html">Tool Design as API Design</a>, applied here to work distribution instead of retry safety. Second, each worker's result is its own <em>insert-only</em> row keyed by task ID, never a read-modify-write against one shared document — so two workers finishing in the same instant produce two rows, not one row where the second write erased the first. A claim also carries a timestamp, so a reaper query can find tasks claimed long enough ago with no matching result and put them back up for grabs, covering the worker-crashed case without any worker having to detect its own death.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 900 480" role="img" aria-label="Flow: orchestrator inserts task rows; worker agents atomically claim one row at a time via a conditional update; each worker writes its own insert-only result row; a dashboard streams live status over SSE; a reaper requeues tasks claimed past a timeout with no result.">
+  <defs>
+    <marker id="tc2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER</text>
+  <rect x="20" y="32" width="300" height="44" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="170" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">tasks table — 40 rows, worker_id NULL</text><text x="170" y="67" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">orchestrator inserts once at dispatch</text>
+
+  <text x="20" y="122" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME — WORKERS (N concurrent)</text>
+  <rect x="20" y="130" width="300" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="170" y="151" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">worker: claim next unclaimed task</text><text x="170" y="165" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">UPDATE ... WHERE worker_id IS NULL RETURNING</text>
+  <path d="M170 76 L170 126" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#tc2)"/>
+
+  <rect x="20" y="210" width="300" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="170" y="231" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">only ONE worker's claim wins per row</text><text x="170" y="244" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">race-free — conditional update, not SELECT then UPDATE</text>
+  <path d="M170 176 L170 206" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#tc2)"/>
+
+  <rect x="380" y="130" width="280" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="520" y="151" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">worker does isolated audit, submits result</text><text x="520" y="165" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">POST /results — one INSERT per task_id</text>
+  <path d="M320 176 L380 176 L380 153" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#tc2)"/>
+
+  <rect x="380" y="210" width="280" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="520" y="231" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">results table — insert-only, 1 row/task</text><text x="520" y="244" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">no shared document to clobber</text>
+  <path d="M520 176 L520 206" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#tc2)"/>
+
+  <text x="20" y="300" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="308" width="300" height="42" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/><text x="170" y="329" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">reaper: claimed &gt; 5min, no result → requeue</text><text x="170" y="342" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">covers a crashed worker's abandoned claim</text>
+  <path d="M170 252 L170 304" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#tc2)"/>
+
+  <rect x="380" y="308" width="280" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="520" y="329" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">status stream: SSE per task_id</text><text x="520" y="342" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">reuses the pattern from Streaming Agent Output</text>
+  <path d="M520 252 L520 304" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#tc2)"/>
+
+  <text x="20" y="404" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="20" y="412" width="640" height="44" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="340" y="433" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">status grid: 31 done · 6 running · 2 requeued · 1 stuck</text><text x="340" y="447" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">progress visible without polling the tasks table</text>
+  <path d="M170 350 L170 400 L340 400 L340 408" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#tc2)"/>
+  <path d="M520 350 L520 400 L340 400" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#tc2)"/>
+</svg>
+<figcaption><b>FIG 3.1</b> — Claiming is a conditional write, not a read followed by a write — that's the whole difference between "only one worker gets this task" and the cold open's lost-update bug.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["data: tasks table, 40 rows, worker_id NULL"] --> B["worker: claim next unclaimed task<br/>UPDATE ... WHERE worker_id IS NULL RETURNING"]
+  B --> C["only one worker's claim wins per row<br/>conditional update, not SELECT then UPDATE"]
+  B --> D["worker: isolated audit, submit result<br/>POST /results, one INSERT per task_id"]
+  D --> E["results table: insert-only, 1 row/task"]
+  C --> F["reaper: claimed > 5min, no result -> requeue"]
+  D --> G["status stream: SSE per task_id"]
+  F --> H["frontend: status grid"]
+  G --> H</pre>
+</details>
+</figure>
+
+<h3>Layer 4 &amp; 2 — atomic claim and insert-only results (Postgres + TypeScript)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — Express claim/result endpoints over Postgres</button></div>
+  <div class="tab-panel">
+<pre><code>// CREATE TABLE tasks (
+//   id TEXT PRIMARY KEY, payload JSONB NOT NULL,
+//   worker_id TEXT, claimed_at TIMESTAMPTZ
+// );
+// CREATE TABLE results (
+//   task_id TEXT NOT NULL REFERENCES tasks(id),
+//   worker_id TEXT NOT NULL, output JSONB NOT NULL,
+//   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+//   PRIMARY KEY (task_id)   -- one result per task, ever
+// );
+
+app.post("/tasks/claim", async (req, res) => {
+  const workerId = req.body.worker_id;
+  // The WHERE clause is what makes this race-free: under N concurrent
+  // callers, Postgres serializes row-level updates, so exactly one caller's
+  // UPDATE sees worker_id IS NULL for a given row and the rest see zero rows.
+  const claim = await db.query(
+    `UPDATE tasks SET worker_id = $1, claimed_at = now()
+     WHERE id = (
+       SELECT id FROM tasks WHERE worker_id IS NULL LIMIT 1 FOR UPDATE SKIP LOCKED
+     )
+     RETURNING id, payload`,
+    [workerId]
+  );
+  if (claim.rowCount === 0) return res.status(204).end(); // nothing left to claim
+  return res.status(200).json(claim.rows[0]);
+});
+
+app.post("/results", async (req, res) => {
+  const { task_id, worker_id, output } = req.body;
+  try {
+    // INSERT, never UPDATE — a second submission for the same task_id
+    // fails on the primary key instead of silently overwriting the first.
+    await db.query(
+      `INSERT INTO results (task_id, worker_id, output) VALUES ($1, $2, $3)`,
+      [task_id, worker_id, output]
+    );
+    return res.status(201).json({ status: "recorded" });
+  } catch (err) {
+    if (err.code === "23505") { // unique_violation
+      return res.status(409).json({ error: { code: "ALREADY_SUBMITTED", retryable: false } });
+    }
+    throw err;
+  }
+});
+
+// Run every 60s: tasks claimed too long ago with no matching result go
+// back into the pool for another worker to pick up.
+async function reapStuckClaims() {
+  await db.query(
+    `UPDATE tasks SET worker_id = NULL, claimed_at = NULL
+     WHERE claimed_at < now() - interval '5 minutes'
+       AND id NOT IN (SELECT task_id FROM results)`
+  );
+}
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — worker agent: claim, work, submit (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — worker loop</button></div>
+  <div class="tab-panel">
+<pre><code>import requests, uuid
+
+def run_worker(orchestrator_url: str):
+    worker_id = str(uuid.uuid4())
+    while True:
+        claim = requests.post(f"{orchestrator_url}/tasks/claim", json={"worker_id": worker_id})
+        if claim.status_code == 204:
+            break  # no tasks left — this worker is done, others may still run
+        task = claim.json()
+
+        # Isolated work: this worker never reads or writes another
+        # worker's output, and never touches a shared document.
+        finding = audit_service_for_secrets(task["payload"]["service_name"])
+
+        submit = requests.post(f"{orchestrator_url}/results", json={
+            "task_id": task["id"], "worker_id": worker_id, "output": finding,
+        })
+        if submit.status_code == 409:
+            # A reaper requeued this task and another worker already
+            # finished it first — not an error, just lost the race.
+            continue
+</code></pre>
+  </div>
+</div>
+<p>The status grid in FIG 3.1 is a small consumer of the same SSE pattern covered in <a href="streaming-agent-output-to-the-browser.html">Streaming Agent Output to the Browser</a> — that article works through the reconnect and backpressure mechanics in depth, so this one doesn't repeat them; the dashboard here just subscribes to a per-task status channel and renders a grid cell per row.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>Shared mutable output, read-modify-write instead of insert.</strong> Symptom: the cold open — a run reports fewer results than tasks dispatched, with zero errors logged anywhere, because nothing failed; a write just silently overwrote another write. This is the single most common coordination bug because it's invisible until someone counts.</li>
+<li><strong>The claim itself isn't atomic — a SELECT followed by a separate UPDATE.</strong> Symptom: trace or log review shows two different worker IDs both submitting a result for the same <code>task_id</code>, one of them hitting the results table's unique-key rejection. The gap between "read who's unclaimed" and "write that I've claimed it" is exactly wide enough for two workers to both read the row as free before either writes — the fix is a single conditional statement (the <code>WHERE worker_id IS NULL</code> update, or <code>FOR UPDATE SKIP LOCKED</code>), never a check-then-act pair.</li>
+<li><strong>No claim timeout, so a crashed worker's task is claimed forever.</strong> Symptom: the job dashboard sits at "39/40 done" indefinitely; querying the tasks table shows one row with a <code>worker_id</code> and <code>claimed_at</code> from hours ago and no matching row in <code>results</code>. Whatever killed that worker — an unhandled exception, an OOM, a container eviction — never got a chance to release its claim, and nothing else was watching for a claim that never resolved.</li>
+<li><strong>The coordination tax exceeds the parallelism payoff.</strong> Symptom: a benchmark run splitting the same total workload into progressively smaller tasks shows total wall-clock time going <em>up</em>, not down, past some worker count — each task's claim round-trip and each worker's independent re-read of shared context (a schema file, a style guide) start to dominate over the actual work being done. This isn't a bug in the coordination primitives; it's a sign the task granularity is wrong. Fewer, larger shards reduce the number of claim/commit round-trips and the number of times shared context gets paid for redundantly.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — dynamic claiming vs. static assignment</div>
+<p>Reach for the claim-table pattern in §3 when the task count isn't known until runtime (you're processing "every file matching X," discovered by a scan), when workers can plausibly crash or hang and need their work picked up by someone else without re-running the whole batch, or when task sizes are uneven enough that a worker finishing early should be able to pull more work instead of sitting idle while a straggler grinds — a pull-based claim queue self-balances load; a push-based static assignment doesn't.</p>
+<p>Stay with static assignment — spawn exactly N workers, hardcode worker <em>i</em> to shard <em>i</em>, no claim table at all — when the split is fixed and known before dispatch and a failed worker is acceptable to just retry as a whole unit (re-run worker 7, not "some subset of worker 7's rows"). It's strictly less code, there's no database in the critical path, and for a small, evenly-sized, known-ahead-of-time batch the coordination machinery in this article is solving a problem you don't have yet.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> stand up the §3 claim/result endpoints and prove, under real concurrency, that a task is claimed exactly once and a stuck claim gets reclaimed.</p>
+<ol>
+<li>Run Postgres locally: <code>docker run -d --name pg -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:16</code>, then create the <code>tasks</code> and <code>results</code> tables from the DDL comment in §3, and insert 10 rows into <code>tasks</code>.</li>
+<li>Wire up the Express handlers from Layer 2 &amp; 4, with <code>audit_service_for_secrets</code> stubbed to sleep 1 second and return a fake finding.</li>
+<li>Fire 5 concurrent claim requests at once: <code>for i in 1 2 3 4 5; do curl -s -X POST localhost:3000/tasks/claim -H "Content-Type: application/json" -d "{\"worker_id\":\"w$i\"}" & done; wait</code>. Confirm each returned a <em>different</em> <code>id</code> — no two responses claim the same task.</li>
+<li>Submit a result for one claimed task, then submit a second result for that same <code>task_id</code> with a different <code>worker_id</code>. Confirm the second call returns <code>409 ALREADY_SUBMITTED</code> and the <code>results</code> table still has exactly one row for that task.</li>
+<li>Manually backdate one task's <code>claimed_at</code> to 10 minutes ago (<code>UPDATE tasks SET claimed_at = now() - interval '10 minutes' WHERE id = '...'</code>) with no matching result row, then run the <code>reapStuckClaims</code> query from Layer 4. Confirm that task's <code>worker_id</code> is now <code>NULL</code> and a fresh <code>/tasks/claim</code> call picks it up again.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ Five simultaneous claim requests return five distinct task IDs — no duplicate claims.</li>
+<li>✅ A second result submission for an already-completed task is rejected with <code>409</code>, and the results table never has more than one row per <code>task_id</code>.</li>
+<li>✅ A task claimed past the timeout with no result is reclaimable by a new worker after the reaper runs.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A teammate proposes skipping the tasks table entirely: the orchestrator just spawns exactly one worker process per unit of work at dispatch time, hardcoding each worker's assignment as a startup argument. When does that break down, and when is it actually the right call?</strong></p>
+<p><em>Strong answer sketch: static, push-based assignment is strictly simpler and it's correct precisely as long as three things hold — the task count is known before dispatch, task sizes are roughly even, and a failed unit of work is cheap to retry wholesale. Where it breaks down is any workload where the count is discovered at runtime rather than known up front (a recursive file-tree walk, "find every X and process it," where you don't know N until you've already partly done the scan), where task cost varies enough that fixed 1:1 assignment leaves fast workers idle while a slow one is still the long pole, or where a worker can die mid-task and you need to reassign just the unfinished remainder rather than rerunning everything that worker owned. A claim table trades a small amount of infrastructure — one table, one conditional update, one reaper query — for self-balancing load distribution and crash recovery at the granularity of individual tasks instead of whole workers. The judgment call isn't "claim tables are better" in the abstract; it's recognizing which of those three assumptions your specific workload actually violates, because if none of them are violated, the claim table is machinery solving a problem you don't have.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://www.anthropic.com/research/building-effective-agents">Anthropic — Building Effective Agents</a> (names and defines the orchestrator-workers pattern this article builds coordination discipline underneath)</li>
+<li><a href="https://static.googleusercontent.com/media/research.google.com/en//archive/mapreduce-osdi04.pdf">Dean &amp; Ghemawat — MapReduce: Simplified Data Processing on Large Clusters (OSDI 2004)</a> (the original worker/task-assignment/reduce precedent the claim-and-collect pattern in §3 descends from)</li>
+<li><a href="https://www.postgresql.org/docs/current/sql-select.html#SQL-FOR-UPDATE-SHARE">PostgreSQL — SELECT ... FOR UPDATE / SKIP LOCKED</a> (the row-locking primitive behind the atomic claim query in Layer 4)</li>
+<li><a href="https://www.postgresql.org/docs/current/transaction-iso.html">PostgreSQL — Transaction Isolation</a> (the lost-update anomaly under Read Committed that the cold open's shared-document bug is an instance of)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-20 · Stable: row-level locking and conditional-update claiming are decades-old relational-database mechanics, not expected to change. Worth rechecking: framework-native task-queue abstractions built on top of this pattern move faster and may offer a higher-level primitive than hand-rolling the SQL in §3.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: blackboard coordination protocols and event-driven agents/idempotency (both open in the Pillar 1 backlog — this article's claim table is a minimal, single-purpose blackboard). Pairs with <a href="tool-design-as-api-design.html">Tool Design as API Design</a> for the same atomic-claim primitive applied to retries instead of work distribution, and with <a href="streaming-agent-output-to-the-browser.html">Streaming Agent Output to the Browser</a> for the dashboard's SSE transport.</p>
+
+<nav class="pager">
+  <a href="no-framework-200-line-harness.html">← PREV — The No-Framework Option</a>
+  <a href="context-compaction-for-long-running-agents.html">NEXT — Compaction for Long-Running Agents →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>

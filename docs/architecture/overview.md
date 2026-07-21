@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-17 (Astro pilot added — see ADR-0001)
+Last reviewed: 2026-07-21 (merged the Astro pilot branch history into `main`'s line of development — see backlog #10)
 
 ## What this repository is
 
@@ -36,38 +36,42 @@ and Manual follow the same pattern).
   is used ad hoc by the daily agent run for manual verification, per
   `SCHEDULED_TASK_PROMPT.md`).
 
-**Target (`site/` — pilot, not yet deployed):**
+**Target (`site/` — pilot, not yet deployed, not yet on `main`):**
 - [Astro](https://astro.build) (static output, component islands),
   TypeScript (`astro check` strict mode), MDX for content authoring, Zod
   via Astro Content Collections for front-matter schema validation. See
   `docs/decisions/ADR-0001-adopt-astro-for-spa-migration.md`.
 - Has its own `package.json`/`node_modules` (gitignored) — the first
   Node/npm dependency tree in this repository.
+- **Status as of this review:** this pilot was built and committed on a
+  branch that got merged into a stale non-default branch instead of
+  `main` (see backlog #10). It is being reconciled into `main`'s history
+  as part of this run; it still is not wired into deploy or CI.
 
 **Hosting:** GitHub Pages, via `.github/workflows/deploy-pages.yml`
-(deploys the entire repo root on push to the trunk branch — added after
-the initial bootstrap audit, which had found no deploy workflow). This
-workflow uploads raw files with no build step; it does not currently
-build or publish anything from `site/` — see the roadmap for that
-follow-up.
+(deploys the entire repo root on push to `main`). This workflow uploads
+raw files with no build step; it does not build or publish anything from
+`site/` — see the roadmap for that follow-up.
 
 ## Repository layout
 
 ```
 index.html              [legacy, live] Trends Board — home page, bookmark-card UI of daily AI trend topics
+robots.txt              Crawler policy; points at sitemap.xml (added 2026-07-18)
+sitemap.xml             Hand-maintained sitemap of all published pages (added 2026-07-18)
 articles/                [legacy, live] Long-form article stream ("The Daily AI News")
   index.html             Article listing page
   LEDGER.md              Append-only dedup ledger of published articles (topic/date/concepts)
   <slug>.html            One file per published article, self-contained
 manual/                  [legacy, live] "The Agentic Systems Field Manual" — a 16-module curriculum
   index.html             Manual home: dependency graph (SVG) + site-map cards + module statuses
-  module-NN.html         One file per published module (00 published as reference format)
-site/                    [target, pilot — not deployed] Astro project; see ADR-0001
+  module-NN.html         One file per published module (00-05 published so far)
+site/                    [target, pilot — not deployed, not yet on main] Astro project; see ADR-0001
   src/content/articles/  New articles authored as MDX + typed front matter here going forward
   src/layouts/           BaseLayout (SEO: meta/OG/Twitter/JSON-LD) + ArticleLayout
   src/components/        Shared CodeTabs, Figure, Judgment, FailureBlock components
-.github/workflows/       GitHub Pages deploy workflow (builds from repo root only, today)
 SCHEDULED_TASK_PROMPT.md Operating spec for the daily content-generation agent run
+.github/workflows/       deploy-pages.yml — deploys repo root to GitHub Pages on push to main
 docs/                    This knowledge base (architecture-review agent's memory)
 ```
 
@@ -101,13 +105,15 @@ docs/                    This knowledge base (architecture-review agent's memory
 ### 3. Articles — legacy (`articles/`) and pilot (`site/`)
 - A "pillar"-organized full-stack agentic engineering article stream,
   tracked via `articles/LEDGER.md` for dedup by topic/concept rather than
-  exact title match. As of this review: 3 articles published, all as
+  exact title match. As of this review: 7 articles published, all as
   legacy hand-authored HTML.
-- **New articles going forward are authored through `site/`** (Astro
-  content collections + MDX), per ADR-0001 — see
-  `site/src/content/articles/example-post.mdx` for the template and
-  authoring workflow. The 3 already-published legacy articles have not
-  been migrated; whether/how to do that is an open roadmap item.
+- **The Astro pilot (`site/`, ADR-0001) exists but new articles are still
+  being authored in the legacy format** — the pilot was never wired into
+  CI/deploy and its branch history only just got reconciled into `main`
+  (see backlog #10), so `SCHEDULED_TASK_PROMPT.md` continues to instruct
+  the daily run to use the legacy format until that's resolved. None of
+  the 7 published legacy articles have been migrated to `site/`; whether
+  to do that is still an open roadmap item.
 
 ## Data flow
 
@@ -131,20 +137,19 @@ card-rendering script; module pages' tab-switching JS).
 ## Build & deploy pipeline
 
 **Legacy site:** deployed via `.github/workflows/deploy-pages.yml`, which
-uploads the entire repo root to GitHub Pages on push to the trunk branch
-— no build step, no lint/type-check, no test gate. "Verification" for the
-daily content-authoring run is manual/agent-driven (opening pages in a
-headless browser via Playwright per `SCHEDULED_TASK_PROMPT.md`'s "Finish
-every run" section), not an automated gate. This remains a real gap for
-the legacy pages — see `docs/technical-debt/backlog.md`.
+uploads the entire repo root to GitHub Pages on push to `main` — no build
+step, no lint/type-check, no test gate. "Verification" for the daily
+content-authoring run is manual/agent-driven (opening pages in a headless
+browser via Playwright per `SCHEDULED_TASK_PROMPT.md`'s "Finish every run"
+section), not an automated gate. This remains a real gap for the legacy
+pages — see `docs/technical-debt/backlog.md` #6.
 
 **`site/` (Astro pilot):** has a real build step (`npm run build`) and a
-type-checker (`astro check`), both currently run manually/by-agent and
-verified clean, but **not wired into CI** — a push to the trunk branch
-today does not build or deploy anything from `site/`. Wiring that up is
-an explicit, deliberately deferred follow-up (see roadmap) so that
-introducing the new pipeline could not, even accidentally, break the live
-site in this change.
+type-checker (`astro check`), both verified clean when built, but **not
+wired into CI** — a push to `main` today does not build or deploy
+anything from `site/`. Wiring that up is an explicit, deliberately
+deferred follow-up (see roadmap) so that introducing the new pipeline
+could not, even accidentally, break the live site.
 
 ## Notable conventions worth preserving
 

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /docs/
+
+Sitemap: https://tseten1996.github.io/daily-ai-news/sitemap.xml

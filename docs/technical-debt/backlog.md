@@ -23,13 +23,22 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    for the Astro pilot** (`site/` — see ADR-0001): its shared
    `BaseLayout` emits real meta description, canonical, OG, Twitter, and
    JSON-LD tags automatically for every page built through it. **Still
-   open** for `index.html`, `manual/*.html`, and the 3 already-published
+   open** for `index.html`, `manual/*.html`, and all 7 already-published
    `articles/*.html` pages, none of which are covered by the Astro pilot
-   yet. Remains a good near-term, low-risk task for those specific files.
-2. **OPEN — No `robots.txt` or `sitemap.xml`.** Neither file exists at the
-   repo root. Crawlers have no sitemap to discover the ~19 content pages
-   (16 trend topics live inside one `index.html`, but articles and manual
-   modules are discrete URLs that benefit from a sitemap).
+   yet. High value, low risk — likely needs splitting: (a) add real
+   `<meta description>` + canonical + OG/Twitter tags per page first
+   (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
+   article/module page as a follow-up slice.
+2. **DONE (2026-07-18, follow-up fixed 2026-07-19)** — `robots.txt` and a
+   hand-maintained `sitemap.xml` added at the repo root. Follow-up: the
+   sitemap must be updated by hand whenever a page is added/removed (see
+   maintenance note in `docs/seo/checklist.md`) until/unless the tooling
+   ADR (item 6 below) decides to generate it instead. **This already
+   happened**: the 2026-07-19 daily content run published a new article
+   without a matching sitemap entry; the same day's architecture-review
+   run caught and fixed it, and added a step to
+   `SCHEDULED_TASK_PROMPT.md`'s "finish every run" checklist so the
+   content-authoring run keeps the sitemap current itself going forward.
 3. **OPEN — No RSS/Atom feed.** Domain standards call for an RSS feed for
    a blog platform; none exists. Would need a decision on whether it's
    hand-maintained XML (consistent with the no-build-step philosophy) or
@@ -52,18 +61,31 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
 ## Priority 7 — Architecture health
 
-6. **PARTIALLY ADDRESSED (2026-07-17) for the Astro pilot only** — No
-   build, lint, type-check, or CI pipeline for the *legacy* pages. The
-   original finding: no `package.json`, no linter config, no CI workflow
-   under `.github/workflows/` — this repo had *nothing* for the "verify
-   before PR" step beyond manual inspection, and every other quality gate
-   was blocked on deciding whether to introduce tooling at all. **ADR-0001
-   answers this for new Articles-stream content**: `site/` has a real
-   build (`npm run build`) and type-check (`astro check`), both verified
-   clean, deliberately kept isolated from the legacy pages so it can't
-   break them. **Still fully open** for `index.html` and `manual/*.html`,
-   and for the CI-side question of *running* `site/`'s checks
-   automatically (see roadmap: "Wire `site/` into CI/deploy").
+6. **OPEN — No build, lint, type-check, or test CI pipeline for the
+   legacy pages.** A deploy workflow exists
+   (`.github/workflows/deploy-pages.yml`, added between the 2026-07-17
+   and 2026-07-18 runs) that publishes the repo to GitHub Pages on push
+   to `main` — but it only uploads and deploys static files verbatim; it
+   runs no lint, no HTML validation, no link-checking, no accessibility
+   check, and no test of any kind for `index.html`/`manual/*.html`/
+   `articles/*.html`. This repo has *nothing* for the "verify before PR"
+   step in the agent's non-negotiable safety rules to run for those pages
+   beyond manual inspection. **ADR-0001 answers this for new
+   Articles-stream content only**: `site/` has a real build
+   (`npm run build`) and type-check (`astro check`), both verified clean,
+   deliberately kept isolated from the legacy pages so it can't break
+   them — but that pipeline is not wired into CI either (see item 8).
+   Every other legacy-page quality gate (accessibility CI, SEO
+   validation, broken-link checking) is blocked on deciding whether to
+   introduce *any* verification tooling for those pages, and if so, how
+   to do it without violating the "no build step, fully self-contained
+   pages" design principle the content-authoring spec
+   (`SCHEDULED_TASK_PROMPT.md`) explicitly relies on — note that a
+   verify-only CI step (e.g. an HTML validator or link checker that runs
+   in CI but changes nothing about what ships) would *not* violate that
+   principle, since the served artifact is untouched; that distinction
+   should be central to the ADR. Needs an ADR before any tooling is
+   introduced for the legacy pages — see roadmap.
 7. **OPEN for legacy pages; RESOLVED for the Astro pilot** — Significant
    CSS/JS duplication across every legacy page. Each of the 12 legacy
    HTML files independently redefines the same category of design tokens
@@ -79,9 +101,12 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    touch.
 8. **OPEN — Astro pilot (`site/`) is not wired into CI/deploy.** Verified
    locally only (`npm run build`, `astro check`, manual Playwright
-   screenshot pass — see ADR-0001). A push to the trunk branch today does
-   not build or publish anything from `site/`. See roadmap "Immediate".
-9. **OPEN — Fate of the 3 already-published legacy articles is
+   screenshot pass — see ADR-0001). A push to `main` today does not build
+   or publish anything from `site/`. This was previously invisible on
+   `main` because the pilot's branch history had landed on a stale branch
+   instead of `main` (see item 13, now resolved) — now that it's
+   reconciled, this is a live, actionable item. See roadmap "Immediate".
+9. **OPEN — Fate of the 7 already-published legacy articles is
    undecided.** Running both a legacy `articles/*.html` version and a
    future Astro-migrated version of the same article live at the same
    time would be duplicate content for SEO purposes. Needs a short ADR
@@ -111,6 +136,26 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
     (`site/`) per the user's request to move toward a componentized,
     best-practices architecture. Updated this backlog, the roadmap, and
     `docs/architecture/overview.md` to reflect current vs. target state.
+13. **RESOLVED (2026-07-21)** — Previously: an SPA-migration decision
+    (ADR-0001, Astro pilot) landed on a PR but never reached `main`, and
+    was undocumented on `main`. Discovered while orienting for the
+    2026-07-19 run: PR #6 ("Add Astro pilot for the Articles stream
+    (ADR-0001)") was merged, but its base branch was
+    `claude/daily-ai-trends-tutorial-txft7z` — an old feature-line branch,
+    not `main` — because several earlier PRs (#1-#6) were chained against
+    that branch instead of the true default branch. **Fix applied this
+    run:** the branch carrying the Astro pilot commit (`281cff4`) was
+    merged into `main`'s current line of development (bringing in PRs
+    #7-#12 that had landed on `main` in the meantime — new articles,
+    `robots.txt`/`sitemap.xml`), with all five doc conflicts resolved by
+    hand to reconcile both branches' independent updates. `site/`,
+    `docs/decisions/ADR-0001-adopt-astro-for-spa-migration.md`, and this
+    knowledge base's Astro-pilot content are now present and documented
+    on the branch that will become `main`. **What's still open, tracked
+    separately:** the pilot still isn't wired into CI/deploy (item 8) and
+    the fate of the 7 published legacy articles is still undecided
+    (item 9) — reconciling the history didn't answer either question, it
+    just made them visible and actionable again.
 
 ## Notes / non-issues found during audit
 

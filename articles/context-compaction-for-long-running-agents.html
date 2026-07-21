@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compaction for Long-Running Agents: What Survives When the Context Window Doesn't · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Compaction for Long-Running Agents: What Survives When the Context Window Doesn't
+  slug: context-compaction-for-long-running-agents
+  pillar: Pillar 2 — Reasoning & Context Engineering
+  difficulty: Principal
+  series: none (standalone; cross-links to Hooks as Deterministic Guardrails and Orchestrator-Workers and the Coordination Tax)
+  tags: context-compaction, context-engineering, structured-summarization, session-persistence, agent-memory
+  meta description: How to compact a long-running agent's context without silently deleting the one fact it needed — structured summaries instead of free prose, anchor messages that skip summarization entirely, and the drift, orphan, and cascading-loss failures that show up when compaction is naive.
+  read time: ~12 min (~2,420 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · REASONING &amp; CONTEXT ENGINEERING</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 2 · Reasoning &amp; Context Engineering</div>
+  <h1>Compaction for Long-Running Agents: What Survives When the Context Window Doesn't</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Summarizing old turns to stay under a token budget sounds like a storage problem. It's actually a lossy-compression problem, and the thing that gets lost is whatever the summarizer — a model with no idea what the agent will need forty turns from now — decided wasn't narratively important.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-21</b></span>
+    <span>DIFFICULTY <b>Principal</b></span>
+    <span>READ <b>~12 min (~2,420 words)</b></span>
+    <span>LAB <b>verify a tagged constraint survives compaction while stale facts don't, via curl against both transcript views</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A migration agent was three hours into moving a monorepo's forty-odd services off a deprecated ORM. Turn 34: it tried the straightforward rewrite on the billing service's models, ran the test suite, and got nineteen failures from a circular-import pattern the old ORM had silently tolerated. It reverted, tried a second approach — splitting the models file in two — and that one passed. Turn 91: the context hit the harness's compaction threshold. The summarizer folded turns 1 through 70 into four paragraphs of prose, optimized for "what happened," and moved on. Turn 130, working through a related service, the agent circled back to re-examine the billing models — and re-tried the first, already-failed approach, because the compacted summary described the outcome ("billing models were migrated") without describing the specific thing that hadn't worked and why. It burned eleven minutes and a full test-suite run rediscovering a fact it already knew forty turns earlier, then quietly re-applied the fix it had already found, from scratch. Nobody looking at the final diff would ever know — but the token bill for that session was measurably higher than it needed to be, for pure rework.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>The earliest fix for "context window filled up" wasn't compaction at all — it was crashing, or silently dropping the oldest messages off the front of the list to make room, the same way a ring buffer overwrites its oldest slot. Both are honest about the tradeoff: dropped context is gone, full stop, and nobody pretends otherwise. The failure mode was obvious and constant enough that harness authors moved to the next idea — summarize instead of drop. An LLM call turns the aging portion of the transcript into a paragraph, the paragraph replaces the original messages, and the agent keeps going with a fraction of the tokens. This is now standard: the Claude Agent SDK's <code>tool_runner</code> compacts automatically past a configurable token threshold, and Anthropic's own context-engineering guidance frames the whole problem as "curating the smallest possible set of high-signal tokens" rather than maximizing what fits.</p>
+<p>What "summarize instead of drop" doesn't solve on its own is <em>which</em> tokens are high-signal to a task the summarizer doesn't fully understand yet, because the task isn't finished. A human skimming a meeting for a report and an agent that will act on a transcript forty turns later have different definitions of "important" — the human wants narrative continuity; the agent needs the specific rejected approach, the specific constraint, the specific file path, verbatim, because a paraphrase of "billing models were migrated" is not the same fact as "the direct rewrite fails on a circular import — use the split-file approach." Free-form prose summarization optimizes for the former by default, because that's what summarization models are trained to produce. The fix that closes this gap has two parts, covered in §3: force the summary into a structure that has a dedicated slot for the kinds of facts an agent actually needs back, and let certain messages skip summarization entirely by being tagged as anchors the compactor is never allowed to touch.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>A compaction pass runs in four steps, spread across two layers of the runtime, with the result made visible in two more. First, the harness checks token usage against a budget before the next model call and triggers compaction if it's over threshold. Second, it segments the transcript into three parts: anchor messages (tagged by the harness as constraints or hard-won decisions, carried forward verbatim no matter how old), a recent window (the last <em>N</em> turns, always kept raw), and the compactable middle. Third, the compactable middle is sent to a summarization call constrained to a structured schema — not "write a summary," but "extract these specific fields" — so a rejected approach has somewhere to go that isn't at the mercy of the model's sense of what's narratively worth keeping. Fourth, the original messages are archived (never deleted) in the data layer, the active context is replaced with system prompt + anchors + structured summary + recent window, and that replacement is checkpointed before the agent's next model call — so a crash mid-task resumes from the compacted state instead of redoing the compaction or silently losing it.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 480" role="img" aria-label="Flow: token budget check triggers compaction; transcript splits into anchors, recent window, and compactable middle; the middle is summarized into a structured schema; originals are archived in the data layer, never deleted; the compacted context is checkpointed; the API layer serves both a compact view and a raw view; the frontend renders a collapsible compaction divider.">
+  <defs>
+    <marker id="ta4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="32" width="330" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="185" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">token budget check, before next model call</text><text x="185" y="66" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">over threshold → trigger compaction</text>
+
+  <rect x="20" y="100" width="150" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="95" y="120" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">anchors</text><text x="95" y="133" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">tagged, never touched</text>
+  <rect x="185" y="100" width="150" height="46" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/><text x="260" y="120" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">compactable middle</text><text x="260" y="133" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">everything else, older turns</text>
+  <rect x="350" y="100" width="150" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="425" y="120" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">recent window</text><text x="425" y="133" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">last N turns, kept raw</text>
+  <path d="M185 74 L95 96" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+  <path d="M185 74 L260 96" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+  <path d="M185 74 L425 96" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+
+  <rect x="185" y="178" width="150" height="46" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/><text x="260" y="198" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">structured summary</text><text x="260" y="211" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">schema, not free prose</text>
+  <path d="M260 146 L260 174" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <text x="20" y="264" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA</text>
+  <rect x="20" y="272" width="240" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="140" y="292" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">archive originals</text><text x="140" y="305" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">never deleted, kept for raw view</text>
+  <rect x="280" y="272" width="240" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="400" y="292" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">checkpoint compacted context</text><text x="400" y="305" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">persisted before next model call</text>
+  <path d="M260 224 L140 268" fill="none" stroke="var(--ink)" stroke-width="1.1" marker-end="url(#ta4)"/>
+  <path d="M260 224 L400 268" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+
+  <text x="20" y="356" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT</text>
+  <rect x="20" y="364" width="500" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="270" y="385" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">GET /sessions/:id/transcript?view=compact|raw</text><text x="270" y="398" text-anchor="middle" class="svg-label" font-size="8" fill="var(--muted)">serves either view from the same tables</text>
+  <path d="M140 318 L270 360" fill="none" stroke="var(--ink)" stroke-width="1.1" marker-end="url(#ta4)"/>
+  <path d="M400 318 L270 360" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+
+  <text x="20" y="440" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="160" y="448" width="260" height="26" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="3 2"/><text x="290" y="465" text-anchor="middle" class="svg-label" font-size="9" fill="var(--ink)">collapsible compaction divider</text>
+  <path d="M270 406 L290 406 L290 444" fill="none" stroke="var(--ink)" stroke-width="1.1" stroke-dasharray="3 2" marker-end="url(#ta4)"/>
+</svg>
+<figcaption><b>FIG 3.1</b> — Anchors and the recent window never pass through the summarizer. Only the compactable middle is lossy, and even that is archived, not deleted — the raw view exists precisely so a human can see what the agent's active context no longer contains.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["runtime: token budget check<br/>before next model call"] -->|over threshold| B["anchors (tagged, untouched)"]
+  A --> C["compactable middle"]
+  A --> D["recent window (last N turns, raw)"]
+  C --> E["structured summary<br/>schema, not free prose"]
+  E --> F["data: archive originals<br/>never deleted"]
+  E --> G["data: checkpoint compacted context<br/>persisted before next model call"]
+  F --> H["API: GET /sessions/:id/transcript<br/>?view=compact|raw"]
+  G --> H
+  H --> I["frontend: collapsible<br/>compaction divider"]</pre>
+</details>
+</figure>
+
+<h3>Layer 3 — agent runtime: structured summary + anchor tags (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — compaction trigger</button></div>
+  <div class="tab-panel">
+<pre><code>from pydantic import BaseModel
+
+class CompactionSummary(BaseModel):
+    decisions: list[str]            # "billing service: use split-file approach"
+    rejected_approaches: list[str]  # "direct model rewrite — fails on circular import"
+    files_touched: list[str]
+    open_questions: list[str]
+
+ANCHOR_TAGS = {"constraint", "decision"}  # set by the harness when a message is written,
+                                           # not inferred later — see failure mode 2
+KEEP_RECENT = 12
+
+def maybe_compact(session, model, token_budget):
+    if session.token_count < token_budget * 0.8:
+        return session
+
+    anchors = [m for m in session.messages if m.tag in ANCHOR_TAGS]
+    recent = session.messages[-KEEP_RECENT:]
+    compactable = [
+        m for m in session.messages[:-KEEP_RECENT] if m.tag not in ANCHOR_TAGS
+    ]
+
+    summary = model.generate(
+        prompt=SUMMARIZE_PROMPT.format(transcript=render(compactable)),
+        response_schema=CompactionSummary,  # structured — no free-prose escape hatch
+    )
+
+    session.archive(compactable)     # full originals kept, see data layer below
+    session.messages = [session.system_prompt, *anchors, as_message(summary), *recent]
+    session.checkpoint()             # persisted before the next model call fires
+    return session
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 4 — data/infra: archive + checkpoint schema (Postgres)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">SQL — session_messages + session_checkpoints</button></div>
+  <div class="tab-panel">
+<pre><code>CREATE TABLE session_messages (
+  id BIGSERIAL PRIMARY KEY,
+  session_id UUID NOT NULL,
+  turn_index INT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  tag TEXT,                     -- NULL | 'constraint' | 'decision'
+  compacted_into UUID,          -- NULL until archived; FK to the checkpoint that folded it in
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE session_checkpoints (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID NOT NULL,
+  turn_index INT NOT NULL,      -- cutoff: messages up to here were folded in
+  summary JSONB NOT NULL,       -- the CompactionSummary, queryable, diffable
+  active_context JSONB NOT NULL, -- exactly what was sent to the model next — for replay/debug
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 2 — API/transport: serving both views (Node/Express)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — Express transcript endpoint</button></div>
+  <div class="tab-panel">
+<pre><code>app.get("/sessions/:id/transcript", async (req, res) => {
+  const raw = req.query.view === "raw";
+  if (raw) {
+    const rows = await db.query(
+      `SELECT * FROM session_messages WHERE session_id = $1 ORDER BY turn_index`,
+      [req.params.id]
+    );
+    return res.json(rows.rows);
+  }
+  const checkpoint = await db.query(
+    `SELECT * FROM session_checkpoints WHERE session_id = $1 ORDER BY turn_index DESC LIMIT 1`,
+    [req.params.id]
+  );
+  const recent = await db.query(
+    `SELECT * FROM session_messages WHERE session_id = $1 AND compacted_into IS NULL ORDER BY turn_index`,
+    [req.params.id]
+  );
+  return res.json({ checkpoint: checkpoint.rows[0] ?? null, recent: recent.rows });
+});
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 1 — frontend: a divider that admits something was folded (React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React compaction divider</button></div>
+  <div class="tab-panel">
+<pre><code>function CompactionDivider({ checkpoint }: { checkpoint: Checkpoint }) {
+  const [open, setOpen] = useState(false);
+  const { decisions, rejectedApproaches, filesTouched } = checkpoint.summary;
+
+  return (
+    <div className="compaction-divider">
+      <button onClick={() => setOpen(!open)}>
+        ⋯ {decisions.length + rejectedApproaches.length} facts and {filesTouched.length} files
+        folded into a summary at turn {checkpoint.turnIndex} — {open ? "hide" : "show"} original
+      </button>
+      {open && <RawTranscriptRange sessionId={checkpoint.sessionId} through={checkpoint.turnIndex} />}
+    </div>
+  );
+}
+</code></pre>
+  </div>
+</div>
+<p>The divider doesn't just say "some history was summarized" — it states a count, so a reviewer scanning a long session can tell at a glance whether a given compaction pass was a light trim or a heavy fold, and pull the raw range from the API's <code>?view=raw</code> path the moment something looks off.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>Free-prose summarization drops the fact the agent actually needed.</strong> Symptom: the cold open — a rejected approach is present in the archived <code>session_messages</code> rows but absent from the <code>summary</code> JSON, and forty turns later the agent re-tries the same failed approach, visible in the trace as two <code>execute_tool</code> spans with near-identical arguments separated by a compaction checkpoint. Forcing the summary into <code>CompactionSummary</code>'s fixed fields (§3) doesn't guarantee nothing gets lost, but it does guarantee "rejected approaches" has a slot to be lost <em>from</em> — a diff against the raw transcript then tells you exactly what the summarizer skipped, instead of leaving you guessing at a paragraph's omissions.</li>
+<li><strong>Anchor tagging is opt-in and someone forgets it.</strong> Symptom: a constraint stated once in an ordinary turn — never tagged <code>constraint</code> at write time — gets swept into the compactable middle and vanishes into the summary's judgment of what mattered, precisely the mechanism behind the wire-transfer failure in <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a>. That article's fix is a deterministic gate that doesn't depend on context surviving at all; this one's fix is narrower — audit <code>session_messages</code> for rows matching known constraint patterns (dollar thresholds, "never," "do not") with <code>tag IS NULL</code>, and treat every hit as a tagging bug, not a one-off.</li>
+<li><strong>Cascading compaction degrades a checkpoint that was already a summary.</strong> Symptom: a session with three or more checkpoints where <code>files_touched</code> and <code>decisions</code> in the latest checkpoint's JSON are a strict subset of the first checkpoint's, even though the agent did strictly more work in between — each pass summarizes the <em>previous</em> summary along with new turns, and prose-of-a-prose compresses like a re-encoded video: each generation loses detail the last one hadn't lost yet. The fix is to always re-summarize from the full archived originals plus the previous checkpoint's structured fields (which merge losslessly, being lists) rather than from the previous summary's rendered text.</li>
+<li><strong>A checkpoint races an in-flight tool result.</strong> Symptom: a tool call's result row lands in <code>session_messages</code> with a <code>turn_index</code> just older than a checkpoint's cutoff but wasn't included when the checkpoint was computed — an off-by-one between "when compaction read the table" and "when the tool result was written." The active context sent to the model either duplicates that result (it's in both the summary's <code>files_touched</code> and the raw recent window) or drops it (<code>compacted_into IS NULL</code> forever, orphaned, never in either view). The fix is the same discipline as any other read-then-write race: compute the checkpoint's cutoff and mark rows <code>compacted_into</code> inside one transaction, not two round trips a tool call can land between.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — structured compaction vs. a plain sliding window</div>
+<p>Reach for structured, anchor-aware compaction when sessions genuinely run long enough to approach the token budget more than once — multi-hour coding sessions, long research loops, anything racking up dozens of tool calls — and where losing one specific hard-won fact costs real rework, not just a slightly worse paragraph. The structured schema and archive-plus-checkpoint machinery in §3 exist to make that loss detectable and bounded, not to eliminate it entirely.</p>
+<p>Stay with a plain sliding window — keep the last <em>N</em> turns, drop everything older, no LLM call involved — when a task is naturally recency-scoped by construction: a live monitoring agent whose decisions should only ever depend on the last few observations, or a bounded subagent dispatched for one unit of work in an <a href="orchestrator-workers-coordination-tax.html">orchestrator-workers</a> fan-out, which finishes well inside <em>N</em> turns and never approaches a budget in the first place. A sliding window has none of §4's failure modes because it has no summarization step to go wrong — but it deletes rather than compresses, so anything relevant from more than <em>N</em> turns back is gone outright, not lossily available. Choose it only where "gone outright" is actually fine.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> run the compaction trigger from §3 against a seeded session, then use the §3 transcript endpoint to prove a tagged constraint survives compaction verbatim while an untagged, older fact gets folded into the summary and is only visible via the raw view.</p>
+<ol>
+<li>Run Postgres locally and create <code>session_messages</code> and <code>session_checkpoints</code> from the DDL in §3.</li>
+<li>Seed one session with 30 messages: message 2 tagged <code>constraint</code> ("never touch the legacy billing module"), message 10 an ordinary untagged turn stating a rejected approach, messages 25–30 as the "recent window."</li>
+<li>Wire up <code>maybe_compact</code> with a stubbed <code>model.generate</code> that returns a fixed <code>CompactionSummary</code> mentioning the rejected approach from message 10 but, deliberately, <em>not</em> the constraint from message 2 (constraints don't need to appear in the summary — they're carried as anchors, not summarized).</li>
+<li>Run the compaction pass, then wire up the Express endpoint from Layer 2.</li>
+<li>Fire: <code>curl "localhost:3000/sessions/SESSION_ID/transcript?view=compact"</code>. Confirm the response's <code>recent</code> array includes the anchor message from step 2 verbatim, and the <code>checkpoint.summary</code> contains the rejected approach text.</li>
+<li>Fire: <code>curl "localhost:3000/sessions/SESSION_ID/transcript?view=raw"</code>. Confirm all 30 original messages are present, including message 10 in full — proving nothing was deleted, only excluded from the active/compact view.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ The compact view's active context includes the constraint message verbatim, unchanged by the summarization call.</li>
+<li>✅ The compact view's <code>checkpoint.summary.rejected_approaches</code> contains the fact from message 10.</li>
+<li>✅ The raw view returns all 30 original rows regardless of what the compact view shows — archiving never deletes.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A teammate suggests skipping the anchor-tagging mechanism entirely: just re-run the structured summarization prompt on the <em>full</em> transcript every time, including previously summarized content, so nothing is ever permanently excluded from consideration. What's wrong with that, and what would you do instead?</strong></p>
+<p><em>Strong answer sketch: this sounds safer — "always re-derive from everything" — but it reintroduces cost and latency that scale with total session length rather than with the compactable window, which defeats the entire point of compacting at turn 90 of a session that might run to turn 400; by the end you're re-summarizing hundreds of turns on every single compaction pass instead of a bounded window. Worse, it doesn't actually fix the loss problem, because a summarization call over a longer transcript is not more faithful than one over a shorter transcript — it's the same lossy process with a bigger input, and nothing stops the same fact from being dropped again on pass two even though it "should" have another chance to be noticed. Anchors solve a different problem than "give facts more chances to be seen": they remove specific, harness-identified categories of fact (constraints, decisions) from the summarization process altogether, so their survival doesn't depend on any model's judgment, repeated or not. The right fix keeps re-summarization scoped to the bounded compactable window (§3), and if the team's real worry is "what if we tagged the wrong things as anchors," the answer is auditing tag coverage against the archived raw transcript, as failure mode 2 describes — not asking a summarizer to try harder over more tokens.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Anthropic — Effective context engineering for AI agents</a> (the "curate the smallest high-signal token set" framing this article's anchor/summary split is built on)</li>
+<li><a href="https://platform.claude.com/docs/en/build-with-claude/compaction">Claude Platform Docs — Compaction</a> (the production automatic-compaction feature this article's §3 pipeline generalizes into an inspectable, structured version)</li>
+<li><a href="https://docs.langchain.com/oss/python/langchain/short-term-memory">LangChain — Short-term memory</a> (trimming vs. filtering vs. summarization as three distinct strategies, referenced in §2's history)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-21 · Stable: summarize-and-checkpoint as the general fix for context-window limits is now standard practice across major harnesses. Worth rechecking: the Claude Agent SDK's default token threshold and exact compaction trigger behavior cited above — that surface has changed at least once already and may change again.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds on the compaction failure illustrated in <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a>'s cold open — that article's fix is a policy gate that doesn't depend on context at all; this one is for everything that isn't a hard policy rule but still needs to survive. Pairs with <a href="orchestrator-workers-coordination-tax.html">Orchestrator-Workers and the Coordination Tax</a> for when a bounded subagent can skip this machinery entirely.</p>
+
+<nav class="pager">
+  <a href="orchestrator-workers-coordination-tax.html">← PREV — Orchestrator-Workers and the Coordination Tax</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>

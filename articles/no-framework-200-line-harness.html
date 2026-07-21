@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The No-Framework Option: A 200-Line Harness You Fully Own · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: The No-Framework Option: A 200-Line Harness You Fully Own
+  slug: no-framework-200-line-harness
+  pillar: Pillar 3 — Frameworks & Harnesses
+  difficulty: Foundations
+  series: none (standalone; foundation for future Pillar 3 articles — LangGraph state and checkpointing, PydanticAI, Claude Agent SDK harness anatomy, CrewAI vs. AutoGen)
+  tags: agent-harness, no-framework, agent-loop, checkpointing, tool-registry, agent-runtime
+  meta description: What a framework actually buys you over a hand-rolled agent loop — and what it costs — built from the loop, tool registry, checkpoint table, and hook chokepoint that make up a minimal harness, plus the failure modes that show up when a team skips owning them.
+  read time: ~9 min (~1,650 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · FRAMEWORKS &amp; HARNESSES</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 3 · Frameworks &amp; Harnesses</div>
+  <h1>The No-Framework Option: A 200-Line Harness You Fully Own</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">The bug was four lines wide. Finding it took a week inside the framework's checkpointer, its reducer semantics, and the superstep boundary that decides when partial state commits. A hand-rolled loop wouldn't have hidden the bug behind machinery nobody on the team had needed to read before that week.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-19</b></span>
+    <span>DIFFICULTY <b>Foundations</b></span>
+    <span>READ <b>~9 min (~1,650 words)</b></span>
+    <span>LAB <b>run a minimal harness, crash it mid-tool-call, resume without re-executing</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>Three weeks into debugging a stuck agent, the on-call engineer finds the bug: a tool call gets silently dropped whenever two graph nodes race to write the same state key. The defect itself is four lines wide. Finding it meant first learning the framework's checkpointer, its reducer semantics, and the superstep boundary that decides when a partial state actually commits — a debugging detour longer than writing the whole agent loop from scratch would have taken. Nobody on the team had ever called <code>checkpointer.put()</code> directly before that week. Nobody had needed to, until the framework's own internals became the thing standing between them and their bug.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>Before agent frameworks, teams called a chat completions API directly inside a hand-written loop: send messages and tool schemas, get a response, dispatch any tool calls, append the results, repeat. Every team reinvented persistence, retries, and multi-step tool dispatch from scratch, which is real, wasted effort. LangChain and its successors — LangGraph, CrewAI, AutoGen — genericized those primitives and added real capability on top: graph-based orchestration, built-in checkpointing with replay, and a wide connector ecosystem.</p>
+<p>That capability has a cost, and Anthropic's own December 2024 field notes on the subject make the opposite-sounding argument from the same evidence: across their customer engagements, the most successful implementations used simple, composable patterns rather than frameworks, because a framework adds a layer of abstraction between you and the raw prompts and responses — precisely the layer this article's cold open got lost inside. Both things are true at once. A framework buys real capability at a real abstraction tax; for one agent with a bounded, known tool set, that tax routinely costs more than the loop it replaces would have.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>A harness, stripped to its mechanism, is a loop with four moving parts: call the model with the running message list and tool schemas; if the response contains no tool-use blocks, you're done; if it does, run each proposed call through a policy gate before touching the real world, execute the ones that pass, and append the results as the next turn; then persist the message list before looping again. "200 lines" isn't the loop itself — that's under 30 — it's the loop plus a tool registry, the checkpoint calls, and basic error handling, all of it code your team wrote and can read top to bottom in an afternoon.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 400" role="img" aria-label="Flow: frontend submits a message; API layer loads the latest checkpoint and calls the harness; the agent runtime loop calls the model, checks a policy hook before executing any tool call, executes it, and checkpoints after every step; checkpoints persist to a database table keyed by session and step.">
+  <defs>
+    <marker id="th1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="32" width="380" height="44" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="210" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">POST /sessions/{id}/messages</text><text x="210" y="67" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">loads latest checkpoint, calls run_harness()</text>
+
+  <text x="20" y="116" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME — THE LOOP</text>
+  <rect x="20" y="124" width="380" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="145" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">call model(messages, tools)</text><text x="210" y="158" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">no tool_use → return; else continue</text>
+  <path d="M210 76 L210 118" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#th1)"/>
+
+  <rect x="20" y="192" width="180" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="110" y="212" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">hook(name, args)</text><text x="110" y="225" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">allow / deny / ask</text>
+  <path d="M210 166 L110 166 L110 188" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#th1)"/>
+
+  <rect x="220" y="192" width="180" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="310" y="212" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">execute tool</text><text x="310" y="225" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">from tool_registry[name]</text>
+  <path d="M200 215 L216 215" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#th1)"/>
+
+  <rect x="120" y="270" width="180" height="42" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="210" y="290" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">checkpoint(session, step)</text><text x="210" y="303" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">after every step, not just at the end</text>
+  <path d="M310 238 L210 238 L210 266" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#th1)"/>
+  <path d="M110 238 L110 252 L210 252 L210 266" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#th1)"/>
+
+  <text x="20" y="336" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA</text>
+  <path d="M210 312 L210 344" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#th1)" stroke-dasharray="3 3"/>
+  <rect x="20" y="344" width="380" height="34" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.2"/><text x="210" y="365" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">agent_checkpoints(session_id, step, status, messages)</text>
+
+  <text x="450" y="150" class="svg-label" font-size="9" fill="var(--muted)">This is the exact hook</text>
+  <text x="450" y="164" class="svg-label" font-size="9" fill="var(--muted)">chokepoint "Hooks as</text>
+  <text x="450" y="178" class="svg-label" font-size="9" fill="var(--muted)">Deterministic Guardrails"</text>
+  <text x="450" y="192" class="svg-label" font-size="9" fill="var(--muted)">assumes already exists.</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — The loop, the gate, and the checkpoint are the three parts a framework replaces with its own abstractions — and the three parts you own outright if you don't reach for one.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["POST /sessions/{id}/messages<br/>loads checkpoint, calls run_harness()"] --> B["call model(messages, tools)"]
+  B -->|tool_use present| C["hook(name, args): allow/deny/ask"]
+  C -->|allow| D["execute tool from tool_registry"]
+  C -->|deny| E["checkpoint(session, step)"]
+  D --> E
+  E --> F["agent_checkpoints table<br/>(session_id, step, status, messages)"]
+  F -.loop.-> B</pre>
+</details>
+</figure>
+
+<h3>Layer C — agent runtime: the loop itself (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — core harness loop</button></div>
+  <div class="tab-panel">
+<pre><code>import anthropic, json
+
+client = anthropic.Anthropic()
+MAX_ITERATIONS = 12  # cost governor / loop-detection backstop — see §4.1
+
+def run_harness(session_id, messages, tools, tool_registry, hook, checkpoint):
+    for step in range(MAX_ITERATIONS):
+        response = client.messages.create(
+            model="claude-sonnet-5", max_tokens=4096,
+            messages=messages, tools=tools,
+        )
+        messages.append({"role": "assistant", "content": response.content})
+
+        tool_uses = [b for b in response.content if b.type == "tool_use"]
+        if not tool_uses:
+            checkpoint(session_id, step, messages, status="complete")
+            return response
+
+        results = []
+        for call in tool_uses:
+            decision = hook(call.name, call.input)   # the PreToolUse chokepoint
+            if decision == "deny":
+                results.append({"type": "tool_result", "tool_use_id": call.id,
+                                 "content": "denied by policy", "is_error": True})
+                continue
+            output = tool_registry[call.name](**call.input)
+            results.append({"type": "tool_result", "tool_use_id": call.id, "content": output})
+        messages.append({"role": "user", "content": results})
+        checkpoint(session_id, step, messages, status="in_progress")  # every step,
+                                                                        # not just the end
+
+    raise RuntimeError(f"session {session_id} exceeded {MAX_ITERATIONS} iterations")
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer D — data/infra: a checkpoint table that survives a crash (SQL + Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">SQL + Python — Postgres checkpoint store</button></div>
+  <div class="tab-panel">
+<pre><code>-- CREATE TABLE agent_checkpoints (
+--   session_id TEXT NOT NULL,
+--   step       INT  NOT NULL,
+--   status     TEXT NOT NULL,        -- in_progress | complete
+--   messages   JSONB NOT NULL,
+--   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+--   PRIMARY KEY (session_id, step)
+-- );
+
+def checkpoint(session_id, step, messages, status):
+    db.execute(
+        """INSERT INTO agent_checkpoints (session_id, step, status, messages)
+           VALUES (%s, %s, %s, %s)
+           ON CONFLICT (session_id, step) DO UPDATE
+             SET status = EXCLUDED.status, messages = EXCLUDED.messages, updated_at = now()""",
+        (session_id, step, status, json.dumps(messages)),
+    )
+
+def resume(session_id):
+    row = db.query_one(
+        "SELECT step, messages FROM agent_checkpoints WHERE session_id=%s ORDER BY step DESC LIMIT 1",
+        (session_id,),
+    )
+    return (row["step"], row["messages"]) if row else (0, [])
+</code></pre>
+  </div>
+</div>
+<p>Wiring this to a frontend is a thin API route: <code>POST /sessions/{id}/messages</code> calls <code>resume()</code>, appends the new user turn, calls <code>run_harness()</code>, and returns the result — or, for a chat UI, streams it the way <a href="streaming-agent-output-to-the-browser.html">Streaming Agent Output to the Browser</a> already covers. That article's SSE and reconnect plumbing sits on top of this loop's step-by-step checkpoint writes, not instead of them.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>No iteration cap.</strong> Symptom: a cost or token-usage spike traced to one session, with a trace showing a dozen-plus <code>execute_tool</code> spans calling the same tool with near-identical arguments — the model stuck re-proposing a call that never satisfies whatever it's checking for. §3's <code>MAX_ITERATIONS</code> exists precisely to turn that into a bounded, loud failure instead of an unbounded, silent one.</li>
+<li><strong>Checkpointing after the tool executes instead of before.</strong> Symptom: a crash mid-step, then a resumed session that re-executes a tool call already reflected in the real world — a duplicate charge, a duplicate ticket. This is exactly the gap <a href="tool-design-as-api-design.html">Tool Design as API Design</a>'s idempotency keys exist to close; a harness without them turns "resume from checkpoint" into "replay side effects."</li>
+<li><strong>No single chokepoint for policy.</strong> Symptom: a new compliance rule ships as a patch scattered across every function in <code>tool_registry</code> instead of one gate, and the next audit finds one call site where it was missed. <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a> is built entirely on the <code>hook()</code> call in §3 already existing — retrofit it later and every policy change becomes a hand-audited sweep instead of one edit.</li>
+<li><strong>An unregistered tool name crashes the loop.</strong> Symptom: an unhandled <code>KeyError</code> in the logs, the whole session lost, because the crash happens between the model's response and the next <code>checkpoint()</code> call. A model calling a tool name that drifted out of the registry (renamed, removed) is routine, not exotic — the loop needs to catch it and checkpoint an error state, not fall over.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — hand-rolled harness vs. a framework</div>
+<p>Reach for the hand-rolled harness when you have one agent, a bounded and largely known tool set, and a team that wants full visibility into retries, checkpointing, and cost governance — the code in §3 is the whole surface area you have to reason about when something breaks, and there's no framework release to track or upgrade around.</p>
+<p>Reach for a framework — LangGraph, CrewAI, or similar — when you need built-in multi-agent graph orchestration, a wide library of prebuilt connectors, or your team doesn't have the bandwidth to own retry, checkpoint, and cost-governor code itself and is knowingly trading the abstraction tax for velocity. That tax is real, not hypothetical: it's the cold open. Pay it on purpose, for a capability you actually need, not by default.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> run the §3 harness with one real tool, crash it mid-session on purpose, and prove resuming from the checkpoint doesn't replay a tool call that already ran.</p>
+<ol>
+<li>Set up Postgres (or SQLite for a quicker path) and create the <code>agent_checkpoints</code> table from §3's DDL comment.</li>
+<li>Wire <code>tool_registry = {"get_time": lambda: str(datetime.now())}</code> and a <code>hook</code> that always returns <code>"allow"</code>. Wrap <code>run_harness</code> in a one-route script: <code>curl -X POST localhost:8000/sessions/s1/messages -d '{"text":"what time is it?"}'</code> should return a final answer.</li>
+<li>Confirm a row exists in <code>agent_checkpoints</code> for <code>session_id='s1'</code> with <code>status='complete'</code>.</li>
+<li>Force a crash: add a second turn ("now add 100 to that") but kill the process (Ctrl-C) right after the tool executes and before the final <code>checkpoint()</code> call — comment out that one line temporarily to simulate it reliably.</li>
+<li>Call <code>resume("s1")</code> and re-run the loop from the returned step. Confirm the harness produces a final answer without calling <code>get_time</code> again — the resumed messages list already contains that turn's tool result.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ The curl call in step 2 returns a model-generated final answer, not raw tool output.</li>
+<li>✅ Step 3's row exists with the full message history in <code>messages</code> — inspectable with <code>SELECT messages FROM agent_checkpoints WHERE session_id='s1'</code>.</li>
+<li>✅ Step 5 resumes without a second <code>execute_tool</code> span for <code>get_time</code> — confirmed by adding a print statement inside the tool function and observing it fire exactly once across both runs.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A teammate proposes adopting LangGraph on day one for a single-agent internal support bot with three tools, arguing "we might need multi-agent later." What's the right call?</strong></p>
+<p><em>Strong answer sketch: build the §3-style harness now. The complexity a framework brings isn't avoided by adopting it early, it's deferred — you pay the abstraction tax (learning the state-graph model, debugging through its checkpointer) starting today, for a multi-agent capability you don't have a concrete use for yet. For three tools and one agent, that tax exceeds what a well-isolated ~200-line loop costs to run and debug. The "might need it later" risk is also smaller than it sounds: migrating a harness into a framework later is a bounded, mechanical port — wrap the existing tool registry, drop the loop, keep the checkpoint schema — as long as the tool-registry and checkpoint boundaries were kept clean from the start, which is a cheap discipline to hold onto regardless of which path you're on. Adopt the framework the day you actually have two coordinating agents, not in anticipation of maybe having them.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://www.anthropic.com/research/building-effective-agents">Anthropic — Building Effective Agents</a> (the "simple, composable patterns over frameworks" argument this article's §2 draws on directly)</li>
+<li><a href="https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview">Anthropic — Tool Use with Claude</a> (the <code>tool_use</code>/<code>tool_result</code> message shapes §3's loop is built on)</li>
+<li><a href="https://langchain-ai.github.io/langgraph/concepts/persistence/">LangGraph — Persistence &amp; Checkpointing</a> (the framework-side version of §3's Layer D, for contrast — this is the abstraction the cold open's engineer had to learn)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-19 · Stable: the loop-plus-registry-plus-checkpoint shape here has been the baseline agent pattern since function-calling APIs shipped and isn't expected to change. Worth rechecking: LangGraph's persistence API surface, cited for contrast in §7, has moved fast and specific method names may have shifted by the time you read this.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: Pillar 3's LangGraph state/checkpointing, PydanticAI, and Claude Agent SDK harness-anatomy articles — each is best understood as "what this loop looks like once a framework owns it." Pairs with <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a> for the policy layer that plugs into the <code>hook()</code> call here, and <a href="tool-design-as-api-design.html">Tool Design as API Design</a> for the idempotency contract failure mode 2 depends on.</p>
+
+<nav class="pager">
+  <a href="hooks-as-deterministic-guardrails.html">← PREV — Hooks as Deterministic Guardrails</a>
+  <a href="orchestrator-workers-coordination-tax.html">NEXT — Orchestrator-Workers and the Coordination Tax →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
