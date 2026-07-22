@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-21 (merged the Astro pilot branch history into `main`'s line of development — see backlog #10)
+Last reviewed: 2026-07-22 (fixed a recurring missing-sitemap-entry regression and added a verify-only CI check — see backlog #2, #10)
 
 ## What this repository is
 
@@ -71,7 +71,9 @@ site/                    [target, pilot — not deployed, not yet on main] Astro
   src/layouts/           BaseLayout (SEO: meta/OG/Twitter/JSON-LD) + ArticleLayout
   src/components/        Shared CodeTabs, Figure, Judgment, FailureBlock components
 SCHEDULED_TASK_PROMPT.md Operating spec for the daily content-generation agent run
-.github/workflows/       deploy-pages.yml — deploys repo root to GitHub Pages on push to main
+scripts/                 check-sitemap.sh — verify-only sitemap-completeness check, run in CI
+.github/workflows/       deploy-pages.yml (deploys repo root to GitHub Pages on push to main);
+                         check-sitemap.yml (fails CI if a published page is missing from sitemap.xml)
 docs/                    This knowledge base (architecture-review agent's memory)
 ```
 
@@ -105,7 +107,7 @@ docs/                    This knowledge base (architecture-review agent's memory
 ### 3. Articles — legacy (`articles/`) and pilot (`site/`)
 - A "pillar"-organized full-stack agentic engineering article stream,
   tracked via `articles/LEDGER.md` for dedup by topic/concept rather than
-  exact title match. As of this review: 7 articles published, all as
+  exact title match. As of this review: 8 articles published, all as
   legacy hand-authored HTML.
 - **The Astro pilot (`site/`, ADR-0001) exists but new articles are still
   being authored in the legacy format** — the pilot was never wired into
@@ -138,11 +140,16 @@ card-rendering script; module pages' tab-switching JS).
 
 **Legacy site:** deployed via `.github/workflows/deploy-pages.yml`, which
 uploads the entire repo root to GitHub Pages on push to `main` — no build
-step, no lint/type-check, no test gate. "Verification" for the daily
-content-authoring run is manual/agent-driven (opening pages in a headless
-browser via Playwright per `SCHEDULED_TASK_PROMPT.md`'s "Finish every run"
-section), not an automated gate. This remains a real gap for the legacy
-pages — see `docs/technical-debt/backlog.md` #6.
+step, no lint/type-check. As of 2026-07-22, a second, independent workflow
+(`.github/workflows/check-sitemap.yml`) runs `scripts/check-sitemap.sh` on
+every push/PR and fails the check if a published page is missing from
+`sitemap.xml` — a verify-only gate that doesn't affect what
+`deploy-pages.yml` ships. Beyond that one structural check, "verification"
+for the daily content-authoring run is still manual/agent-driven (opening
+pages in a headless browser via Playwright per
+`SCHEDULED_TASK_PROMPT.md`'s "Finish every run" section), not an automated
+gate. Broader legacy-page CI (lint, HTML validation, a11y) remains a real
+gap — see `docs/technical-debt/backlog.md` #6.
 
 **`site/` (Astro pilot):** has a real build step (`npm run build`) and a
 type-checker (`astro check`), both verified clean when built, but **not

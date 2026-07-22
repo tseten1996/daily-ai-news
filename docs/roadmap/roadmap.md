@@ -1,9 +1,11 @@
 # Roadmap
 
-Last reviewed: 2026-07-21. Reflects the audit in
-`docs/technical-debt/backlog.md`, plus reconciling the orphaned Astro
-pilot / ADR-0001 branch history into `main` this run (backlog #10).
-Re-prioritize as runs land.
+Last reviewed: 2026-07-22. Fixed a recurring missing-sitemap-entry
+regression (a new article shipped without one for the second time despite
+a documentation-only reminder) and added `.github/workflows/check-sitemap.yml`
+as a verify-only CI check so this class of gap no longer depends on a
+human or agent remembering to check by hand (backlog #2, #10). The
+Immediate items below are otherwise unchanged from the 2026-07-21 review.
 
 ## Immediate (next 1-3 runs)
 
