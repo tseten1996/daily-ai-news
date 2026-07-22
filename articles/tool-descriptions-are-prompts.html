@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tool Descriptions Are Prompts: Why the Schema Field Nobody Reviews Controls Tool Selection · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Tool Descriptions Are Prompts: Why the Schema Field Nobody Reviews Controls Tool Selection
+  slug: tool-descriptions-are-prompts
+  pillar: Pillar 4 — MCP, Skills & Hooks
+  difficulty: Practitioner
+  series: none (standalone; sets up a future MCP security / tool-poisoning article)
+  tags: mcp, tool-descriptions, prompt-engineering, tool-selection, trajectory-evals, tool-schema
+  meta description: A tool's JSON Schema description field is unversioned, unreviewed prompt text that directly steers which tool a model picks — the golden-set eval, versioning, and review-gate pipeline that stops a "helpful" wording tweak from silently rerouting production traffic.
+  read time: ~9 min (~1,700 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · MCP, SKILLS &amp; HOOKS</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 4 · MCP, Skills &amp; Hooks</div>
+  <h1>Tool Descriptions Are Prompts: Why the Schema Field Nobody Reviews Controls Tool Selection</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">A tool's <code>description</code> field looks like documentation. To the model, it's tokens in the context window, conditioning the exact same decision a system prompt does — which is why an "improved" sentence that never touches a type or a required field can silently reroute production traffic overnight.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-22</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~9 min (~1,700 words)</b></span>
+    <span>LAB <b>golden-set eval a description change and prove the accuracy delta over curl</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A support-tooling engineer tightens a tool's description from "Process a refund for an order" to "Use this for any refund-related request, including disputes about being double-charged." The edit ships inside an unrelated PR that adds a response field to the same tool — nobody flags the one-line description change in review, because it isn't code, it's a string. Two days later the on-call trace dashboard shows <code>refund_order</code> firing against password-reset tickets and billing-address-change tickets, anywhere a customer's message happens to contain the word "charged." Nothing in the code path changed. The model started routing on the new sentence's vocabulary instead of the account's actual state, and not one eval had run against the new wording before it reached production.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>JSON Schema's <code>description</code> field was, for years, treated the way a docstring is treated: helpful for a human skimming an API spec, inert with respect to program behavior. Early function-calling systems reinforced that assumption — with two or three tools in a prompt, ambiguity rarely surfaced, so a slightly sloppy sentence cost nothing. Type constraints, required fields, and enums were "the contract" (see <a href="tool-design-as-api-design.html">Tool Design as API Design</a> for that half of the story); the sentence explaining what a tool was <em>for</em> got polished by whoever last touched the file, with no review weight, no version pin, and no test.</p>
+<p>That assumption breaks once agents scale past a handful of tools, often built across separate MCP servers owned by separate teams. The description field stops being documentation about the tool and becomes the primary signal the model uses to decide which tool to invoke at all — it is literally text injected into the model's context immediately before it emits a <code>tool_use</code> block, no different in kind from any other prompt the model conditions on. Teams that had already learned to gate system-prompt edits behind eval suites — because a chat product's system prompt is obviously a prompt — didn't apply the same discipline to tool descriptions, because those live in a schema file, not a <code>prompts/</code> directory. The wording slipped under a review process that already existed, just aimed at the wrong file.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>Treat a tool's description exactly like a system-prompt change: version it, eval it against a golden set of paraphrased user requests before it ships, and gate the merge on a measured accuracy delta — not a "reads fine to me" comment. That spans four layers: the MCP server that serves the description text and a version tag for it, the agent runtime that assembles the description into the model's context and observes which tool actually gets picked, a golden-set eval store that turns "did this wording work" into a number, and a review surface where a human sees the diff and the accuracy delta side by side before promoting it.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 520" role="img" aria-label="Flow: an MCP server serves versioned tool descriptions to the agent runtime on the live request path; separately, a description edit runs through a golden-set eval stored in Postgres, surfaces in a frontend review panel showing the accuracy delta, and only an approved change promotes a new description version back into the MCP server.">
+  <defs>
+    <marker id="ta3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="tw3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="32" width="380" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="52" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">MCP server: tools/list</text><text x="210" y="66" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">{ description, _meta.descriptionVersion }</text>
+
+  <text x="20" y="122" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="130" width="380" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="150" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">assembles tool defs into context</text><text x="210" y="164" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">model conditions on description text, emits tool_use</text>
+  <path d="M210 78 L210 124" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+  <text x="415" y="108" class="svg-label" font-size="8.5" fill="var(--accent)">live serving path</text>
+
+  <text x="20" y="236" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER</text>
+  <rect x="20" y="244" width="380" height="52" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="210" y="264" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">golden-set eval run</text><text x="210" y="278" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">10 paraphrased prompts vs. expected tool</text><text x="210" y="290" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">scored + stored, keyed by description hash</text>
+  <path d="M60 78 L60 240" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#tw3)"/>
+  <text x="70" y="170" class="svg-label" font-size="8.5" fill="var(--warn)">description edited</text>
+  <text x="70" y="182" class="svg-label" font-size="8.5" fill="var(--warn)">(pre-deploy path)</text>
+
+  <text x="20" y="350" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="20" y="358" width="380" height="52" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="210" y="378" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">review panel: diff + accuracy delta</text><text x="210" y="392" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">blocks merge if accuracy regresses vs. baseline</text><text x="210" y="404" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">human approves promotion</text>
+  <path d="M210 296 L210 354" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#tw3)"/>
+
+  <path d="M400 384 C 620 384, 620 55, 404 55" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#ta3)"/>
+  <text x="600" y="220" class="svg-label" font-size="8.5" fill="var(--accent)">approved →</text>
+  <text x="600" y="232" class="svg-label" font-size="8.5" fill="var(--accent)">promote new</text>
+  <text x="600" y="244" class="svg-label" font-size="8.5" fill="var(--accent)">descriptionVersion</text>
+  <text x="600" y="256" class="svg-label" font-size="8.5" fill="var(--accent)">live</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — Two paths through the same four layers: a live serving path (solid) where the runtime asks the model to pick a tool, and a pre-deploy gate path (dashed) where a description edit only reaches production after a golden-set eval and a human review sign off on the accuracy delta.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["MCP server: tools/list<br/>{description, _meta.descriptionVersion}"] -->|live serving path| B["agent runtime: assembles context<br/>model emits tool_use"]
+  A -.->|description edited, pre-deploy| C["data/infra: golden-set eval run<br/>scored + stored, keyed by description hash"]
+  C -.-> D["frontend: review panel<br/>diff + accuracy delta, blocks regression"]
+  D -.->|approved| A</pre>
+</details>
+</figure>
+
+<h3>Layer 2 — API/transport: an MCP server that versions its own descriptions (TypeScript)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — MCP server over streamable HTTP</button></div>
+  <div class="tab-panel">
+<pre><code>// Each tool's wording carries a version tag in MCP's generic `_meta`
+// extension point, so the eval harness below can say exactly which
+// wording produced which accuracy number.
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+
+const DESCRIPTIONS = {
+  cancel_subscription: {
+    version: "v3",
+    text: "Permanently end a customer's subscription at the end of the " +
+          "current billing period. Do not use this for a temporary pause " +
+          "— use pause_subscription instead.",
+  },
+  pause_subscription: {
+    version: "v3",
+    text: "Temporarily suspend billing and access for 1-3 months while " +
+          "keeping the subscription record intact. Do not use this to end " +
+          "the subscription permanently — use cancel_subscription instead.",
+  },
+};
+
+const server = new McpServer({ name: "billing-tools", version: "1.4.0" });
+
+for (const [name, { version, text }] of Object.entries(DESCRIPTIONS)) {
+  server.registerTool(
+    name,
+    {
+      description: text,
+      inputSchema: { customer_id: z.string() },
+      _meta: { descriptionVersion: version },
+    },
+    async ({ customer_id }) => handlers[name](customer_id)
+  );
+}
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 &amp; 4 — agent runtime + data: golden-set eval, scored and stored (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — trajectory eval against the live tool defs</button></div>
+  <div class="tab-panel">
+<pre><code># Run in CI on every PR that touches a tool description. Fails the build
+# if accuracy regresses versus the currently-deployed description_hash.
+import anthropic, psycopg, hashlib, json
+
+client = anthropic.Anthropic()
+
+GOLDEN_SET = [
+    ("I want to stop my subscription for good, I'm done with this service", "cancel_subscription"),
+    ("Cancel my plan, I'm switching to a competitor", "cancel_subscription"),
+    ("Can I skip the next couple months but keep my account?", "pause_subscription"),
+    ("I'm traveling for 8 weeks, can you freeze billing until I'm back?", "pause_subscription"),
+    # ... 6 more paraphrases per tool in the real set
+]
+
+def evaluate(tools: list[dict]) -> dict:
+    description_hash = hashlib.sha256(
+        json.dumps([t["description"] for t in tools]).encode()
+    ).hexdigest()[:16]
+
+    results = []
+    for prompt, expected in GOLDEN_SET:
+        resp = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=256,
+            tools=tools,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        called = next((b.name for b in resp.content if b.type == "tool_use"), None)
+        results.append({"prompt": prompt, "expected": expected, "got": called, "hit": called == expected})
+
+    accuracy = sum(r["hit"] for r in results) / len(results)
+    with psycopg.connect() as conn:
+        conn.execute(
+            "INSERT INTO eval_runs (description_hash, accuracy, results) VALUES (%s, %s, %s)",
+            (description_hash, accuracy, json.dumps(results)),
+        )
+    return {"description_hash": description_hash, "accuracy": accuracy, "results": results}
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 1 — frontend: a review panel that blocks a regression (React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React review panel</button></div>
+  <div class="tab-panel">
+<pre><code>function DescriptionReviewPanel({ change }: { change: DescriptionChange }) {
+  const delta = change.newRun.accuracy - change.baselineRun.accuracy;
+  const regressed = delta < 0;
+
+  return (
+    <div className="review-card">
+      <DiffView before={change.before} after={change.after} />
+      <p>
+        Golden-set accuracy: {Math.round(change.baselineRun.accuracy * 100)}%
+        {" -> "}
+        {Math.round(change.newRun.accuracy * 100)}%
+        {regressed && <strong className="warn"> — regression, blocked</strong>}
+      </p>
+      <button disabled={regressed} onClick={() => promote(change.id)}>
+        {regressed ? "Blocked — fix wording" : "Approve & promote descriptionVersion"}
+      </button>
+    </div>
+  );
+}
+</code></pre>
+  </div>
+</div>
+<p>Notice what the panel gates: only the description string. A change to <code>inputSchema</code>'s types or required fields is a different kind of change — it belongs behind the versioning discipline in <a href="tool-design-as-api-design.html">Tool Design as API Design</a>, not this eval gate, because a schema change breaks callers structurally where a wording change breaks them statistically.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>Silent behavior drift from a "helpful" wording edit.</strong> Symptom: this article's cold open — a tool-call distribution graph shows one tool's call rate jump, correlated with a deploy timestamp that touched only the description string, while the code path, model, and input schema are all unchanged. If your alerting only watches error rate, this is invisible: nothing throws, the tool just gets called on inputs it shouldn't have, and returns a technically successful result for a request it was never meant to handle.</li>
+<li><strong>Kitchen-sink descriptions as the tool count grows.</strong> Symptom: golden-set accuracy degrades measurably once live tool count crosses roughly a dozen, even though no individual description changed — a newly added tool's paragraph-length description ate context budget and pushed the disambiguating detail in an older tool's description further from the point where the model decides, and ties increasingly resolve toward whichever tool was declared last, a positional bias that worsens as you add tools, not improves.</li>
+<li><strong>Overlapping descriptions between adjacent tools.</strong> Symptom: two paraphrases of the same underlying intent — "cancel my plan" versus "I'm done with this service" — route to different tools close to half the time, and your golden-set accuracy plateaus around 60-70% no matter how many times you rerun the eval, because the ambiguity lives in wording both tools share, not in any single request.</li>
+<li><strong>An untrusted description as an injection surface.</strong> Symptom: an audit of tool-call payloads turns up a free-text or optional argument on an unrelated tool populated with content that never appeared anywhere in the user's conversation, because a third-party MCP server's description contained an embedded instruction the model treated as legitimate context. This is the sharp end of failure mode 1: if description text steers <em>which</em> tool gets picked, it can steer the <em>arguments</em> passed to it too, and a description you didn't author is a description you haven't reviewed.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — full eval-gate pipeline vs. PR-comment review</div>
+<p>Reach for the full pipeline — versioned descriptions, a golden-set eval gate, a review panel that blocks merges on regression — once your tool count passes roughly a dozen, more than one team authors tool descriptions, or a tool's blast radius is expensive to misroute into (the refund and subscription tools here both qualify: a wrong call either moves money or promises a customer something support never intended). That's the point past which "someone will notice a bad description in code review" stops being true, because nobody scrutinizes a prose edit the way they scrutinize a type signature.</p>
+<p>Stay with lightweight, PR-comment-level review when you own a small, single-team toolset — under about eight tools — where a misroute is cheap to notice and cheap to undo, like a search tool returning irrelevant-but-harmless results. Building golden-set CI for that toolset costs more engineering time than the failures it would ever catch; the eval infrastructure earns its keep only once the cost of a silent misroute exceeds the cost of building the gate.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> wrap the eval harness from §3 in a small HTTP endpoint, prove over <code>curl</code> that an ambiguous pair of tool descriptions scores badly, then fix the wording and prove the same endpoint now scores perfectly.</p>
+<ol>
+<li>Define two tools, <code>cancel_subscription</code> and <code>pause_subscription</code>, with deliberately overlapping first-draft descriptions (e.g. both saying only "manage a customer's subscription").</li>
+<li>Build a 10-prompt golden set: 5 paraphrases that should map to each tool (reuse the four examples in §3's code and extend them).</li>
+<li>Wrap the <code>evaluate()</code> function from §3 in a minimal FastAPI app with a single route: <code>POST /eval/run</code>, returning the JSON from <code>evaluate()</code>.</li>
+<li>Run it: <code>curl -X POST localhost:8000/eval/run</code>. Record the accuracy field and note which prompts missed.</li>
+<li>Rewrite both descriptions using the disambiguating language from the §3 TypeScript snippet ("temporary" vs. "permanent," each pointing at the other tool by name).</li>
+<li>Restart the server and fire the exact same <code>curl</code> command again.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ The first <code>curl</code> call returns <code>accuracy</code> at or below 0.7, with at least one entry in <code>results</code> where <code>got</code> != <code>expected</code>.</li>
+<li>✅ The second call, after the wording fix and a server restart, returns <code>accuracy</code> equal to 1.0 with no mismatched entries.</li>
+<li>✅ Both responses include the per-prompt breakdown (<code>prompt</code>, <code>expected</code>, <code>got</code>), not just the aggregate score — the reviewer needs to see <em>which</em> paraphrase flipped, not just that something did.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>Your team wants to let a support-ops PM — not an engineer — tweak tool descriptions directly in a no-code admin panel, to improve routing accuracy without waiting on a PR. What guardrails would you put in place, and what would you refuse to allow through that panel?</strong></p>
+<p><em>Strong answer sketch: description text is unreviewed prompt injection into the model's decision boundary regardless of who edits it, so every save through the panel has to go through the exact same gate a PR would — the panel's "Save" button calls the golden-set eval pipeline from §3, it doesn't bypass it. A save that regresses accuracy lands in a blocked state, same as the frontend snippet in §3 shows for a code reviewer; the PM sees the same diff-plus-accuracy-delta view an engineer would. What the panel should refuse outright is any edit to the <code>inputSchema</code> — types, required fields, enums — because that's a structural contract change belonging to the versioning discipline in <a href="tool-design-as-api-design.html">Tool Design as API Design</a>, not a wording tweak, and a PM editing it without engineering review reintroduces exactly the schema-drift failure that article describes. The panel should also never auto-publish above some blast-radius threshold: a wording change to a read-only search tool can promote on eval-pass alone, but a change to a tool that moves money or deletes state should still require a human engineer's sign-off in addition to a passing eval, mirroring the tool-call approval-surface pattern one layer up — from gating a tool <em>call</em> to gating a tool <em>definition</em>.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools">Claude Platform Docs — Define tools</a> (Anthropic's guidance on writing tool descriptions and providing examples, the source of the disambiguating-wording pattern used in §3)</li>
+<li><a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools">Model Context Protocol — Tools</a> (the <code>tools/list</code> shape and the generic <code>_meta</code> extension point this article's versioning convention is layered on top of)</li>
+<li><a href="https://gorilla.cs.berkeley.edu/leaderboard.html">Berkeley Function-Calling Leaderboard (BFCL)</a> (an executable, published benchmark for exactly the tool-selection-accuracy problem this article's golden set is a miniature, private version of)</li>
+<li><a href="https://arxiv.org/abs/2305.15334">Patil et al., "Gorilla: Large Language Model Connected with Massive APIs"</a> (2023) (the original paper documenting how API/tool documentation quality directly drives selection accuracy — the root observation this whole article operationalizes)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-22 · Stable: the core mechanism (description text is in-context tokens, not out-of-band metadata) is a property of how function-calling APIs work today and isn't expected to change. Worth rechecking: MCP's <code>_meta</code> extension-point shape, cited from the 2025-06-18 spec revision — MCP has moved fast on tool-result and tool-definition structure and a newer revision may adjust field placement.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: a future Pillar 4 article on MCP security (tool poisoning, confused deputies) — failure mode 4 here is that article's opening wedge, not its full treatment. Pairs with <a href="tool-design-as-api-design.html">Tool Design as API Design</a> — together they cover the two halves of a tool's contract: what it's structurally allowed to accept (schema) and what it's semantically steered to be called for (description).</p>
+
+<nav class="pager">
+  <a href="context-compaction-for-long-running-agents.html">← PREV — Compaction for Long-Running Agents</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
