@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A2A Protocol Anatomy: Agent Cards, Task Lifecycle, and Discovery Between Independent Agents · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: A2A Protocol Anatomy: Agent Cards, Task Lifecycle, and Discovery Between Independent Agents
+  slug: a2a-protocol-anatomy
+  pillar: Pillar 6 — Agent-to-Agent
+  difficulty: Foundations
+  series: none (standalone; opens Pillar 6; sets up future articles on A2A vs. MCP and agent-as-tool vs. agent-as-server)
+  tags: a2a, agent-to-agent, agent-cards, task-lifecycle, discovery, multi-agent
+  meta description: A2A standardizes how independently-deployed agents discover each other's skills and track a task's lifecycle across an organizational boundary — agent cards, JSON-RPC + SSE transport, and the reconciliation pattern that stops a retry from double-firing a partner's agent.
+  read time: ~9 min (~1,650 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · AGENT-TO-AGENT</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 6 · Agent-to-Agent</div>
+  <h1>A2A Protocol Anatomy: Agent Cards, Task Lifecycle, and Discovery Between Independent Agents</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Two agents built by two different teams, on two different stacks, behind two different trust boundaries, need to hand off a unit of work and both need to agree on its state days later. A2A doesn't replace MCP's agent-to-tool contract — it standardizes the agent-to-agent one.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-23</b></span>
+    <span>DIFFICULTY <b>Foundations</b></span>
+    <span>READ <b>~9 min (~1,650 words)</b></span>
+    <span>LAB <b>stand up a minimal A2A server + client and prove task state survives a disconnect over curl</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>Your procurement agent needs a vendor's reimbursement status. It calls a REST endpoint the vendor's platform team hand-rolled eighteen months ago, gets back <code>{"status": "processing"}</code>, and has no way to know whether that means five seconds or five days. Six minutes later your orchestrator's retry policy fires — the connection timed out on your side, not theirs — and the vendor's system, which was never given an idempotency key because nobody agreed on one, opens a second reimbursement case for the same invoice. Nobody on your team can see the vendor's task queue. Nobody on the vendor's team knows your retry logic exists. Neither agent is broken; they were never speaking a protocol built for this handoff, so every partner integration reinvents task states, polling cadence, and auth from scratch, badly, once per partner.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>Before a standard existed for this, teams had two bad options. The first was a bespoke webhook contract per partner: an ad hoc <code>status</code> string with meanings only one team's runbook explained, no standard way to resume after a dropped connection, and authentication negotiated over email. The second was pretending the remote agent was just another tool — wrapping it behind a synchronous HTTP call the way you'd call any internal function. That works for a single hop under thirty seconds and falls apart the moment the task needs a human's approval on the other side, runs for hours, or needs to survive your process restarting mid-call. OpenAPI, the closest existing standard, describes CRUD-shaped resources with a fixed set of verbs — it has no vocabulary for "this task is now waiting on a human," no concept of a capability an agent can reason about and choose to invoke, and no standard way for the remote side to say what it can do before you commit to calling it.</p>
+<p>That last gap is the one worth being precise about, because it's easy to confuse with a problem <a href="tool-design-as-api-design.html">MCP</a> already solves. MCP standardizes how a host application calls tools <em>inside its own trust boundary</em> — the tools it registers are effectively extensions of its own runtime. A2A (originated at Google in April 2025, now governed by the Linux Foundation, with v1.0 shipped April 2026) standardizes something structurally different: how one autonomous agent discovers what a <em>separate</em> agent — running its own reasoning loop, on infrastructure you don't control, behind its own auth — can do, and how the two track a task's lifecycle across that boundary without a shared database, a shared deploy, or a shared team.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>A2A defines three things a caller needs and one thing both sides need to agree on. Discovery: a remote agent publishes an <b>Agent Card</b> — a JSON document at the well-known URI <code>/.well-known/agent-card.json</code> — declaring its name, its <code>skills</code> (each with an id, description, and supported input/output modes), the auth schemes it accepts, and the endpoint to call. Transport: JSON-RPC 2.0 over HTTPS, with a synchronous <code>SendMessage</code> for short tasks, <code>SendStreamingMessage</code> opening a Server-Sent Events stream of status and artifact updates for long-running ones, and — critically — <code>GetTask</code>, which lets either side ask "where does this task actually stand" independent of whatever request just failed. What both sides agree on is the <b>task</b> object itself: an id, a <code>status.state</code>, and a history of messages and artifacts. State moves through <code>submitted</code> → <code>working</code> → a terminal state (<code>completed</code>, <code>failed</code>, <code>canceled</code>, <code>rejected</code>), with <code>input-required</code> and <code>auth-required</code> as pause states — the task isn't done or dead, it's parked waiting for a follow-up message on the same task id.</p>
+<p><code>GetTask</code> is the piece that answers the cold open's question, if you actually call it before retrying: a task id is a durable handle to state that outlives any single connection, so the correct response to a timeout is "ask what happened," not "resend and hope." That reframes cross-org delegation as a four-layer problem, not just a network call: the frontend layer is wherever a human watches tasks that parked waiting on them; the API/transport layer is A2A's own wire format; the agent runtime layer is your orchestrator deciding to delegate and the remote agent's skill handler doing the work; and the data/infra layer is the local record that maps your side's idempotency key to the remote task id, so a retry becomes a lookup instead of a second <code>SendMessage</code>.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 560" role="img" aria-label="Flow: a local orchestrator's agent runtime mints an idempotency key and writes a shadow task row in data/infra before calling SendMessage over A2A's JSON-RPC transport to a remote agent's agent runtime, which executes the skill and streams status updates back; a task parked in input-required surfaces on a frontend ops queue for a human to resolve with a follow-up message.">
+  <defs>
+    <marker id="ta6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="tw6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+    </marker>
+  </defs>
+
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER (your side)</text>
+  <rect x="20" y="32" width="380" height="52" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="52" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">task_shadow row</text><text x="210" y="66" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">idempotency_key → remote_task_id, last_state</text>
+
+  <text x="20" y="128" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME (your orchestrator)</text>
+  <rect x="20" y="136" width="380" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="156" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">delegate tool: decides to call remote skill</text><text x="210" y="170" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">writes shadow row first, then sends</text>
+  <path d="M210 84 L210 132" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta6)"/>
+
+  <text x="20" y="238" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT (A2A wire protocol)</text>
+  <rect x="20" y="246" width="380" height="60" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="266" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">JSON-RPC SendMessage / SendStreamingMessage</text><text x="210" y="280" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">SSE: TaskStatusUpdateEvent, TaskArtifactUpdateEvent</text><text x="210" y="293" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">GetTask reconciles after any disconnect</text>
+  <path d="M210 182 L210 242" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta6)"/>
+
+  <text x="470" y="238" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME (remote agent, other org)</text>
+  <rect x="470" y="246" width="390" height="60" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="665" y="266" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">Agent Card at /.well-known/agent-card.json</text><text x="665" y="280" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">skill handler: submitted → working → completed</text><text x="665" y="293" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">may pause: input-required / auth-required</text>
+  <path d="M400 276 L466 276" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta6)"/>
+  <path d="M466 292 L400 292" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta6)"/>
+
+  <text x="20" y="374" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX (your ops queue)</text>
+  <rect x="20" y="382" width="380" height="54" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="210" y="402" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">task row: state badge, "needs input" flag</text><text x="210" y="416" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">human resolves via follow-up message on same task id</text>
+  <path d="M210 306 L210 378" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="3 3" marker-end="url(#tw6)"/>
+  <text x="222" y="345" class="svg-label" font-size="8.5" fill="var(--warn)">state = input-required</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — Delegating a task across an org boundary touches all four layers: the shadow row is written before the network call (not after), so a crash between "sent" and "confirmed" leaves a lookup path instead of a blind spot; a parked task surfaces to a human rather than silently expiring.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["data/infra: write task_shadow row<br/>idempotency_key → remote_task_id"] --> B["agent runtime: orchestrator's delegate tool"]
+  B --> C["API/transport: SendMessage / SendStreamingMessage (JSON-RPC + SSE)"]
+  C <--> D["agent runtime: remote agent's skill handler<br/>Agent Card at /.well-known/agent-card.json"]
+  C -.->|state = input-required| E["frontend: ops queue task row<br/>human resolves via follow-up message"]</pre>
+</details>
+</figure>
+
+<h3>Layer 3 &amp; 2 — remote agent runtime + transport: a minimal A2A server (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — FastAPI, one skill, in-memory task store</button></div>
+  <div class="tab-panel">
+<pre><code># A single skill, "check-invoice-status", exposed over A2A's two
+# required surfaces: the Agent Card (discovery) and a JSON-RPC endpoint
+# (SendMessage, GetTask). Runs with: uvicorn a2a_server:app
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import uuid, time
+
+app = FastAPI()
+TASKS: dict[str, dict] = {}
+
+AGENT_CARD = {
+    "name": "vendor-billing-agent",
+    "description": "Looks up invoice and reimbursement status for a partner.",
+    "url": "https://vendor.example.com/a2a",
+    "skills": [{
+        "id": "check-invoice-status",
+        "description": "Given an invoice id, return its current status.",
+        "inputModes": ["application/json"],
+        "outputModes": ["application/json"],
+    }],
+    "securitySchemes": {"bearer": {"type": "http", "scheme": "bearer"}},
+}
+
+@app.get("/.well-known/agent-card.json")
+def agent_card():
+    return AGENT_CARD
+
+@app.post("/a2a")
+async def rpc(request: Request):
+    body = await request.json()
+    method, params, req_id = body["method"], body.get("params", {}), body["id"]
+
+    if method == "SendMessage":
+        task_id = str(uuid.uuid4())
+        invoice_id = params["message"]["parts"][0]["text"]
+        # Real handlers do real work here; this one resolves immediately.
+        TASKS[task_id] = {
+            "id": task_id,
+            "status": {"state": "completed", "timestamp": time.time()},
+            "artifacts": [{"parts": [{"text": f"invoice {invoice_id}: paid"}]}],
+        }
+        result = TASKS[task_id]
+
+    elif method == "GetTask":
+        task = TASKS.get(params["id"])
+        if task is None:
+            return JSONResponse(
+                {"jsonrpc": "2.0", "id": req_id,
+                 "error": {"code": -32001, "message": "task not found"}},
+                status_code=404,
+            )
+        result = task
+
+    else:
+        return JSONResponse(
+            {"jsonrpc": "2.0", "id": req_id,
+             "error": {"code": -32601, "message": "method not found"}},
+            status_code=400,
+        )
+
+    return {"jsonrpc": "2.0", "id": req_id, "result": result}
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 &amp; 4 — local orchestrator: idempotency shadow row before the call (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — tool function backed by Postgres</button></div>
+  <div class="tab-panel">
+<pre><code># The shadow row is written BEFORE the network call. If the process
+# crashes or the connection times out after that write, the caller's
+# next attempt looks the key up instead of minting a second task.
+import httpx, psycopg, hashlib, json
+
+A2A_ENDPOINT = "https://vendor.example.com/a2a"
+
+def check_invoice_status(invoice_id: str) -> dict:
+    idem_key = hashlib.sha256(f"check-invoice:{invoice_id}".encode()).hexdigest()[:24]
+
+    with psycopg.connect() as conn:
+        existing = conn.execute(
+            "SELECT remote_task_id, last_state FROM task_shadow WHERE idempotency_key = %s",
+            (idem_key,),
+        ).fetchone()
+
+        if existing:
+            remote_task_id, last_state = existing
+            if last_state in ("completed", "failed", "canceled", "rejected"):
+                return _cached_result(conn, remote_task_id)
+            # In-flight from a prior attempt: reconcile, don't resend.
+            return _get_task(remote_task_id, conn)
+
+        conn.execute(
+            "INSERT INTO task_shadow (idempotency_key, remote_task_id, last_state) "
+            "VALUES (%s, NULL, 'pending')",
+            (idem_key,),
+        )
+        conn.commit()
+
+    resp = httpx.post(A2A_ENDPOINT, json={
+        "jsonrpc": "2.0", "id": idem_key, "method": "SendMessage",
+        "params": {"message": {"parts": [{"text": invoice_id}]}},
+    }, timeout=30.0).json()
+
+    task = resp["result"]
+    with psycopg.connect() as conn:
+        conn.execute(
+            "UPDATE task_shadow SET remote_task_id = %s, last_state = %s "
+            "WHERE idempotency_key = %s",
+            (task["id"], task["status"]["state"], idem_key),
+        )
+        conn.commit()
+    return task
+
+def _get_task(remote_task_id: str, conn) -> dict:
+    resp = httpx.post(A2A_ENDPOINT, json={
+        "jsonrpc": "2.0", "id": remote_task_id, "method": "GetTask",
+        "params": {"id": remote_task_id},
+    }, timeout=30.0).json()
+    task = resp["result"]
+    conn.execute(
+        "UPDATE task_shadow SET last_state = %s WHERE remote_task_id = %s",
+        (task["status"]["state"], remote_task_id),
+    )
+    conn.commit()
+    return task
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 1 — frontend: an ops queue row for a parked task (React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React task row</button></div>
+  <div class="tab-panel">
+<pre><code>// Fed by your own backend's SSE endpoint, not the remote agent's SSE
+// directly — see "Streaming Agent Output to the Browser" for the
+// reconnect-safe relay pattern this assumes.
+function A2ATaskRow({ task }: { task: ShadowTask }) {
+  const parked = task.lastState === "input-required" || task.lastState === "auth-required";
+  return (
+    <div className={`task-row ${parked ? "needs-input" : ""}`}>
+      <span className="state-badge">{task.lastState}</span>
+      <span>{task.remoteAgentName} · {task.skillId}</span>
+      {parked && (
+        <button onClick={() => openFollowUp(task.remoteTaskId)}>
+          Resolve — reply on task {task.remoteTaskId.slice(0, 8)}
+        </button>
+      )}
+    </div>
+  );
+}
+</code></pre>
+  </div>
+</div>
+<p>Notice the shadow row's job: it's not a cache of the remote task for convenience, it's the thing that turns "did my last call actually land" from a guess into a lookup. That's the same idempotency-key discipline as <a href="tool-design-as-api-design.html">Tool Design as API Design</a>, applied one trust boundary further out — inside your own system a lost update is a bug; across an org boundary it's a bug you can't even see the other half of.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>Blind retry storms across the trust boundary.</strong> Symptom: the remote agent's task log shows two tasks with near-identical payloads seconds apart, and you find out from the vendor's invoice, not your own logs, because a retry that skips <code>GetTask</code> and calls <code>SendMessage</code> again looks identical to a legitimate new request from the far side of the boundary — there's no shared database to catch the duplicate the way there would be inside one team's system.</li>
+<li><strong>Stale Agent Card, silently wrong.</strong> Symptom: task calls that worked yesterday start failing with an auth error or a schema mismatch immediately after a partner deploy, because your orchestrator cached the Agent Card and kept calling a skill whose <code>inputModes</code> or security scheme changed underneath it. Nothing on your side changed; the card you're reasoning from is no longer the one the endpoint actually implements, and there's no version field forcing you to notice.</li>
+<li><strong>A task parked at <code>input-required</code> that nobody's watching.</strong> Symptom: a remote task sits paused indefinitely and eventually times out on the far side, while your system has no record it was ever waiting — because the orchestrator only handled the synchronous <code>completed</code> path and never wired the §3 pause states to anything a human sees. The task didn't fail; it just aged out while parked, and your side finds out only when the vendor asks why you never replied.</li>
+<li><strong>Treating a remote skill's description as trusted tool text.</strong> Symptom: once the Agent Card's <code>skills[].description</code> is fed straight into your local model's tool list, it's exposed to exactly the injection surface <a href="tool-descriptions-are-prompts.html">Tool Descriptions Are Prompts</a> describes — except now the description is authored by an organization you don't control, not a teammate's PR. A card you haven't reviewed is prompt text you haven't reviewed.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — A2A vs. a plain internal API</div>
+<p>Reach for A2A when the two agents are owned by genuinely separate parties — different teams, different companies, different deploy cadences — and you need standardized discovery (what can the other side even do) plus a task lifecycle that survives disconnects, human-in-the-loop pauses, and retries without a shared database to referee them. That's the situation the protocol was built for, and rolling your own version of agent cards, task states, and reconciliation semantics per partner is the exact reinvention this article's cold open describes.</p>
+<p>Stay with a plain internal API — or the coordination patterns in <a href="orchestrator-workers-coordination-tax.html">Orchestrator-Workers and the Coordination Tax</a> — when everything lives inside one trust boundary and one deploy. Agent cards and JSON-RPC discovery buy you nothing over a typed internal client when you already control both ends' schemas and can just change them together; adding A2A there is protocol overhead paying for a problem — cross-org discovery — you don't have.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> run the §3 server and client, then prove over <code>curl</code> that <code>GetTask</code> — not a resend — is how you recover from a dropped connection.</p>
+<ol>
+<li>Save the FastAPI server from §3 as <code>a2a_server.py</code> and run <code>uvicorn a2a_server:app --port 8000</code>.</li>
+<li><code>curl localhost:8000/.well-known/agent-card.json</code> — confirm the card lists the <code>check-invoice-status</code> skill.</li>
+<li>Send a task: <code>curl -X POST localhost:8000/a2a -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"SendMessage","params":{"message":{"parts":[{"text":"INV-4471"}]}}}'</code>. Record the returned <code>result.id</code>.</li>
+<li>Simulate the cold open's dropped connection: instead of resending step 3, call <code>GetTask</code> with that id: <code>curl -X POST localhost:8000/a2a -d '{"jsonrpc":"2.0","id":"2","method":"GetTask","params":{"id":"&lt;task id&gt;"}}'</code>.</li>
+<li>Wire the §3 Python client's <code>check_invoice_status()</code> against a local Postgres instance (or swap <code>psycopg</code> calls for an in-memory dict for the lab), and call it twice in a row with the same <code>invoice_id</code>.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ Step 3's response and step 4's <code>GetTask</code> response both show <code>status.state: "completed"</code> for the <em>same</em> task id — proving state is queryable independent of the original request.</li>
+<li>✅ The server's in-memory <code>TASKS</code> dict contains exactly one entry after step 3, regardless of how many times you run step 4.</li>
+<li>✅ The two calls to <code>check_invoice_status()</code> in step 5 produce exactly one row in <code>task_shadow</code> and exactly one <code>SendMessage</code> hitting the server — verify by counting requests in the server's uvicorn log, not just checking the client's return value.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>Your company wants to expose an internal agent to an external partner over A2A for the first time. What do you refuse to put in the Agent Card, and how do you stop the task lifecycle itself from becoming an attack surface?</strong></p>
+<p><em>Strong answer sketch: the Agent Card should declare the minimum skill set the partner actually needs, not the agent's full internal capability — every skill listed is a capability an untrusted caller can now invoke by name, so "expose everything, gate with auth" is backwards from "expose the minimum, so a compromised or over-broad auth grant has a small blast radius." Concretely: no internal-only skills, no skill descriptions that leak implementation details (database names, internal service topology) the way a careless docstring would, and security schemes scoped per skill rather than one bearer token that unlocks all of them, so a leaked credential doesn't imply full access. On the task-lifecycle side, the attack surface isn't just the initial call: a caller that knows a task id can potentially <code>GetTask</code> or send follow-up messages on tasks it didn't create unless the server checks that the caller's identity matches the task's original requester — treat task ids as authorization-scoped handles, not bearer capabilities, the same discipline you'd apply to any object reference in a REST API. And rate-limit per authenticated caller at the task-creation path specifically, since an external partner controls when and how often <code>SendMessage</code> fires against your skill handler, and that handler is now attacker-adjacent infrastructure whether or not you think of it that way.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://a2a-protocol.org/latest/specification/">A2A Protocol — Official Specification</a> (agent cards, task object shape, JSON-RPC bindings; check method-name casing against the live version before wiring a client — see the AS-OF note below)</li>
+<li><a href="https://a2a-protocol.org/latest/announcing-1.0/">Announcing A2A v1.0</a> (the Linux Foundation governance handoff and what stabilized between v0.2 and v1.0)</li>
+<li><a href="https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/">Announcing the Agent2Agent Protocol (A2A) — Google Developers Blog</a> (the original April 2025 announcement and design motivation)</li>
+<li><a href="https://github.com/a2aproject/A2A">a2aproject/A2A on GitHub</a> (reference SDKs in Python, JavaScript, Java, Go, and .NET, plus the spec source)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-23 · A2A v1.0 shipped April 2026 under Linux Foundation governance; the core data model (Task, Message, Artifact, AgentCard) and the state-machine shape described here are stable enough to build against. Worth rechecking before production: exact JSON-RPC method-name casing and the full push-notification-config method set, since the v0.2→v1.0 jump changed enough surface area that secondary sources — including this article — can lag the spec itself. Verify against the live specification linked above rather than trusting a blog post's paraphrase, this one included.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds on: <a href="tool-design-as-api-design.html">Tool Design as API Design</a>'s idempotency-key discipline, reused here across an org boundary instead of within one system. Sets up: future Pillar 6 articles on A2A vs. MCP as complementary layers, and agent-as-tool vs. agent-as-server as a design choice for exposing your own agent.</p>
+
+<nav class="pager">
+  <a href="tool-descriptions-are-prompts.html">← PREV — Tool Descriptions Are Prompts</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
