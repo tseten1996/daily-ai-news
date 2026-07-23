@@ -26,10 +26,17 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    open** for `index.html`, `manual/*.html`, and the 3 already-published
    `articles/*.html` pages, none of which are covered by the Astro pilot
    yet. Remains a good near-term, low-risk task for those specific files.
-2. **OPEN — No `robots.txt` or `sitemap.xml`.** Neither file exists at the
-   repo root. Crawlers have no sitemap to discover the ~19 content pages
-   (16 trend topics live inside one `index.html`, but articles and manual
-   modules are discrete URLs that benefit from a sitemap).
+2. **DONE (2026-07-23)** — Added `robots.txt` and a hand-maintained
+   `sitemap.xml` at the repo root, listing all 12 current legacy URLs
+   (Trends Board, articles index + 3 published articles, manual index +
+   6 published modules). `robots.txt` points crawlers at the sitemap.
+   Ships automatically since `deploy-pages.yml` uploads the whole repo
+   root — no workflow change needed. **Follow-up (new):** this is
+   hand-maintained, not generated — whichever run next adds a new
+   article, module, or trend-board entry must also add its URL to
+   `sitemap.xml`, or the sitemap silently drifts stale. Worth automating
+   once/if a build step exists for the legacy pages (see item 6); until
+   then, treat it as a checklist item for content-adding runs.
 3. **OPEN — No RSS/Atom feed.** Domain standards call for an RSS feed for
    a blog platform; none exists. Would need a decision on whether it's
    hand-maintained XML (consistent with the no-build-step philosophy) or

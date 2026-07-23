@@ -1,6 +1,6 @@
 # Roadmap
 
-Last reviewed: 2026-07-17 (Astro pilot added — see ADR-0001). Reflects the
+Last reviewed: 2026-07-23 (robots.txt + sitemap.xml added). Reflects the
 initial audit in `docs/technical-debt/backlog.md` plus the SPA/Astro
 migration decision. Re-prioritize as runs land.
 
@@ -22,11 +22,19 @@ migration decision. Re-prioritize as runs land.
   zero real `<meta name="description">`/canonical/OG/Twitter tags.
   Mechanical, low-risk — do not wait on the Astro migration to fix this
   for the pages Astro doesn't cover yet.
-- **Add `robots.txt` and a hand-maintained `sitemap.xml`** (backlog #2),
-  covering both the legacy pages and whatever `site/` pages go live once
-  deployed.
 - **Fix Trends Board heading hierarchy** (backlog #4): confirm intended
   outline, close the h2→h4 gap.
+- **Keep `sitemap.xml` in sync** (backlog #2 follow-up): it's hand-
+  maintained, not generated. Any run that adds a new article, module, or
+  trend-board entry should add its URL to `sitemap.xml` in the same
+  change, or the sitemap will silently go stale.
+
+## Recently completed
+
+- **`robots.txt` + `sitemap.xml`** (2026-07-23, backlog #2) — done for
+  all 12 current legacy URLs. Ships automatically via the existing
+  whole-repo-root Pages deploy; no CI change needed. Will need the same
+  treatment for `site/` URLs once that pilot is wired into deploy.
 
 ## Next
 
