@@ -1,12 +1,19 @@
 # Testing Strategy
 
-Last reviewed: 2026-07-17 (bootstrap run).
+Last reviewed: 2026-07-22 (added the first CI-enforced check for the
+legacy pages).
 
 ## Current state
 
-No automated tests exist in this repository — no unit tests, no component
-tests, no Playwright E2E suite, no CI workflow to run any of it. See
-`docs/technical-debt/backlog.md` #8.
+One narrow, CI-enforced structural check exists (added 2026-07-22):
+`scripts/check-sitemap.sh`, run by `.github/workflows/check-sitemap.yml`
+on every push and pull request, fails if any published legacy HTML page
+is missing from `sitemap.xml`. It was added to stop a specific regression
+(a new article shipping without a sitemap entry) that recurred twice
+despite a documentation-only reminder — see
+`docs/technical-debt/backlog.md` #2 and #10. Beyond that one check, no
+unit tests, component tests, or Playwright E2E suite exist for either the
+legacy pages or `site/`. See `docs/technical-debt/backlog.md` #10.
 
 The daily content-authoring run (`SCHEDULED_TASK_PROMPT.md`, "Finish every
 run") does perform a manual verification pass: it opens changed pages in a

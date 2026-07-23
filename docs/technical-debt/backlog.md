@@ -29,16 +29,25 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    `<meta description>` + canonical + OG/Twitter tags per page first
    (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
    article/module page as a follow-up slice.
-2. **DONE (2026-07-18, follow-up fixed 2026-07-19)** — `robots.txt` and a
-   hand-maintained `sitemap.xml` added at the repo root. Follow-up: the
-   sitemap must be updated by hand whenever a page is added/removed (see
-   maintenance note in `docs/seo/checklist.md`) until/unless the tooling
-   ADR (item 6 below) decides to generate it instead. **This already
-   happened**: the 2026-07-19 daily content run published a new article
-   without a matching sitemap entry; the same day's architecture-review
-   run caught and fixed it, and added a step to
-   `SCHEDULED_TASK_PROMPT.md`'s "finish every run" checklist so the
-   content-authoring run keeps the sitemap current itself going forward.
+2. **DONE (2026-07-18); hardened 2026-07-22** — `robots.txt` and a
+   hand-maintained `sitemap.xml` added at the repo root. **This recurred
+   twice**: the 2026-07-19 daily content run published a new article
+   without a matching sitemap entry (caught and fixed same-day, plus a
+   reminder step added to `SCHEDULED_TASK_PROMPT.md`'s "finish every run"
+   checklist) — and it recurred again on 2026-07-22, when
+   `articles/tool-descriptions-are-prompts.html` shipped without a
+   sitemap entry despite that reminder already being in place. Two
+   recurrences of the same gap despite a documentation-only fix showed
+   the prose reminder alone wasn't sufficient. **Fix applied 2026-07-22:**
+   fixed the missing entry again, and added `scripts/check-sitemap.sh` +
+   `.github/workflows/check-sitemap.yml` — a verify-only CI check
+   (doesn't touch what ships, doesn't gate `deploy-pages.yml`) that fails
+   the "Check sitemap freshness" status check on any push/PR where a
+   published legacy HTML page has no matching `sitemap.xml` `<loc>`.
+   Confirmed the check actually catches this exact regression (ran it
+   against the pre-fix commit — failed as expected; passes after the
+   fix). Sitemap staleness should no longer depend on a human or agent
+   remembering to check by hand.
 3. **OPEN — No RSS/Atom feed.** Domain standards call for an RSS feed for
    a blog platform; none exists. Would need a decision on whether it's
    hand-maintained XML (consistent with the no-build-step philosophy) or
@@ -85,7 +94,13 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    in CI but changes nothing about what ships) would *not* violate that
    principle, since the served artifact is untouched; that distinction
    should be central to the ADR. Needs an ADR before any tooling is
-   introduced for the legacy pages — see roadmap.
+   introduced for the legacy pages — see roadmap. **Update (2026-07-22):**
+   item 2's sitemap-freshness check (`scripts/check-sitemap.sh` +
+   `.github/workflows/check-sitemap.yml`) is a first concrete instance of
+   the verify-only pattern described above — added narrowly to fix a
+   recurring live regression, not as a general decision on legacy-page
+   tooling. The broader ADR (lint/HTML-validation/link-checking/a11y CI)
+   is still open; this one check does not preempt or substitute for it.
 7. **OPEN for legacy pages; RESOLVED for the Astro pilot** — Significant
    CSS/JS duplication across every legacy page. Each of the 12 legacy
    HTML files independently redefines the same category of design tokens
@@ -124,7 +139,15 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
     `SCHEDULED_TASK_PROMPT.md`, but nothing is codified as a repeatable,
     CI-enforceable test. `site/` has `astro check` (type-check) but no
     E2E/component tests yet either. Blocked on item 8 (CI wiring) to
-    become enforceable rather than just runnable locally.
+    become enforceable rather than just runnable locally. **Update
+    (2026-07-22):** one narrow, CI-enforceable structural check now
+    exists — `scripts/check-sitemap.sh`, run by
+    `.github/workflows/check-sitemap.yml` on every push/PR — verifying
+    every published legacy HTML page has a `sitemap.xml` entry. This is
+    the first automated, repeatable, CI-gated check in the repository for
+    the legacy pages. It covers exactly one structural property, not
+    behavior or user journeys — the Playwright E2E gap this item
+    describes remains fully open.
 
 ## Priority 10 — Documentation
 

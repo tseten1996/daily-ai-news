@@ -8,9 +8,15 @@
   </url>
   <url>
     <loc>https://tseten1996.github.io/daily-ai-news/articles/</loc>
-    <lastmod>2026-07-21</lastmod>
+    <lastmod>2026-07-22</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://tseten1996.github.io/daily-ai-news/articles/tool-descriptions-are-prompts.html</loc>
+    <lastmod>2026-07-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://tseten1996.github.io/daily-ai-news/articles/context-compaction-for-long-running-agents.html</loc>

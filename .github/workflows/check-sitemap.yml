@@ -1,0 +1,16 @@
+name: Check sitemap freshness
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check-sitemap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify every published page is in sitemap.xml
+        run: ./scripts/check-sitemap.sh
