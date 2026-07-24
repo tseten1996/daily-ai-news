@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Case Study: A Release-Confidence Agent With a Deterministic Gate Verdict · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Case Study: A Release-Confidence Agent With a Deterministic Gate Verdict
+  slug: release-confidence-agent-deterministic-gate-verdict
+  pillar: Pillar 8 — Applied & Consulting
+  difficulty: Principal
+  series: none (standalone; builds on Tool Design as API Design and Hooks as Deterministic Guardrails; sets up future Pillar 7 eval-gating-releases and Pillar 8 anti-pattern-catalog articles)
+  tags: case-study, release-engineering, policy-as-code, structured-outputs, deterministic-gates, ci-cd
+  meta description: How a client's LLM release-readiness copilot went from "grep the prose for the word approved" to a typed risk-signal agent behind a deterministic, unit-testable gate function — and the audit trail that made it survive a postmortem.
+  read time: ~11 min (~2,150 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · APPLIED &amp; CONSULTING</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 8 · Applied &amp; Consulting</div>
+  <h1>Case Study: A Release-Confidence Agent With a Deterministic Gate Verdict</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">A client's LLM release copilot wrote accurate, well-hedged prose about every PR's risk. The automation reading that prose couldn't tell a hedge from an approval. The fix wasn't a better prompt — it was refusing to let a model's paragraph be the thing an unattended pipeline acts on.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-24</b></span>
+    <span>DIFFICULTY <b>Principal</b></span>
+    <span>READ <b>~11 min (~2,150 words)</b></span>
+    <span>LAB <b>implement a deterministic gate function and prove it's reproducible with curl</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A payments team at a mid-size fintech wired an LLM "release copilot" into their deploy pipeline. Before every merge to <code>main</code>, the agent read the diff, the test summary, and last week's eval scores, then posted a paragraph of prose to the PR. A GitHub Action grepped that paragraph for the word "approved" and, if found, auto-merged. On a Thursday afternoon the agent's paragraph read: <em>"This change touches the payment retry loop and increases risk; it is not recommended for release without additional review, though if a hotfix is unavoidable it could be approved with monitoring."</em> The grep matched. The PR merged itself, unattended, at 4:52pm. The retry loop had an off-by-one that double-submitted a subset of card charges. Nothing in the agent's output was actually wrong — it correctly flagged the risk and hedged the way a careful engineer would in a Slack message. The automation reading it had no concept of a hedge; it only knew whether one substring appeared inside another.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what teams did before it</h2>
+<p>Release gates existed long before agents did, and the pre-LLM version was purely rule-based: lint checks, coverage percentages, a minimum reviewer count, a canary error-rate threshold. That version is deterministic and auditable, and it is also blind to semantic risk that doesn't show up as a number — a one-line change to idempotency-key derivation and a one-line comment typo are statistically identical to a coverage gate. Teams reached for an LLM to close that gap: read the diff, understand what actually changed, say something a static threshold can't. The failure wasn't reaching for the model. It was wiring the model's free-text answer directly into an unattended action, the way the cold open's grep did — treating a paragraph written for a human reader as if it were a boolean a machine could act on.</p>
+<p>Teams that got burned by exactly this responded in one of two overcorrecting ways. Some ripped the LLM back out and returned to pure threshold gates, throwing away real signal the model actually had. Others kept the LLM but required a human to read every paragraph before merge — which quietly reintroduces the throughput problem the automation was built to remove, and at real PR volume degrades into rubber-stamping: nobody reads paragraph thirty of the day closely. The version that survived a postmortem did neither. It split "how risky does this look" from "what does the organization do about that" into two different pieces of software with two different reliability properties — the same boundary this site's <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a> article draws around a single tool call, applied here to the terminal decision of an entire pipeline stage: the model proposes typed, scored signals; a deterministic function no model ever touches disposes of them into a verdict.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>The agent never outputs a verdict. It outputs a <code>RiskAssessment</code> — a list of scored, typed signals, one per risk dimension, each with a rationale and evidence references — through a forced-schema tool call, not free text. A separate function, ordinary code with no model call in it, reads those signals plus a versioned policy configuration and returns one of a small, closed set of verdicts: <code>PASS</code>, <code>PASS_WITH_WARNINGS</code>, <code>BLOCK</code>, or <code>ESCALATE</code>. That function is the entire gate. It is unit-testable, it is reviewable by whoever owns risk appetite without touching the agent's prompt, and — critically for a postmortem — given the same signals and the same policy version, it returns the same verdict every time, which a model call cannot promise.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 560" role="img" aria-label="Flow: agent runtime produces typed risk signals, not a verdict; the API layer fetches the active policy and runs a pure gate function to compute a verdict; the result is persisted and pushed to a dashboard; a BLOCK or ESCALATE verdict can only be changed through an audited override endpoint that writes its own row.">
+  <defs>
+    <marker id="ta3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="32" width="380" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">assess(diff, tests, eval_scores) → RiskAssessment</text><text x="210" y="68" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">forced tool-call schema — no free-text verdict allowed</text>
+
+  <text x="20" y="120" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="128" width="380" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="149" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">POST /gate/evaluate</text><text x="210" y="163" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">fetches active gate_policy, no model call past this point</text>
+  <path d="M210 78 L210 122" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <rect x="20" y="200" width="380" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="210" y="221" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">computeVerdict(signals, policy) — pure function</text><text x="210" y="235" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">no I/O, no clock: same inputs → same verdict, forever</text>
+  <path d="M210 174 L210 196" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <text x="20" y="292" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER</text>
+  <rect x="20" y="300" width="180" height="48" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="110" y="320" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">gate_policy</text><text x="110" y="334" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">versioned thresholds</text>
+  <path d="M180 200 L110 200 L110 296" fill="none" stroke="var(--accent)" stroke-width="1.1" stroke-dasharray="3 3" marker-end="url(#ta3)"/>
+
+  <rect x="220" y="300" width="180" height="48" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="310" y="320" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">release_assessments</text><text x="310" y="334" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">signals + policy_version + verdict</text>
+  <path d="M210 246 L210 324 L216 324" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <text x="20" y="410" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="20" y="418" width="380" height="48" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="438" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">dashboard renders verdict + per-signal bars</text><text x="210" y="452" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">SSE push on assessment insert</text>
+  <path d="M310 348 L310 380 L210 380 L210 414" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <rect x="120" y="496" width="260" height="48" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/><text x="250" y="516" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">POST /gate/override — reason required</text><text x="250" y="530" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">writes gate_overrides row, never edits verdict in place</text>
+  <path d="M210 466 L210 480 L250 480 L250 492" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <text x="450" y="212" class="svg-label" font-size="9" fill="var(--muted)">A postmortem replays this box</text>
+  <text x="450" y="226" class="svg-label" font-size="9" fill="var(--muted)">alone: same stored signals,</text>
+  <text x="450" y="240" class="svg-label" font-size="9" fill="var(--muted)">same policy_version, must</text>
+  <text x="450" y="254" class="svg-label" font-size="9" fill="var(--muted)">reproduce the stored verdict</text>
+  <text x="450" y="268" class="svg-label" font-size="9" fill="var(--muted)">exactly — that's the guarantee</text>
+  <text x="450" y="282" class="svg-label" font-size="9" fill="var(--muted)">a model call can't make.</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — The model never writes to <code>verdict</code>. It writes to <code>signals</code>; <code>computeVerdict</code> is the only code path allowed to write <code>verdict</code>, and it never calls the model.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["agent runtime: assess() → RiskAssessment<br/>forced schema, no free-text verdict"] --> B["API: POST /gate/evaluate<br/>fetch active gate_policy"]
+  B --> C["computeVerdict(signals, policy)<br/>pure function, no model call"]
+  C --> D["DB: release_assessments<br/>signals + policy_version + verdict"]
+  D --> E["dashboard: verdict + signal bars<br/>via SSE push"]
+  E -->|BLOCK or ESCALATE| F["POST /gate/override<br/>reason required, writes gate_overrides row"]</pre>
+</details>
+</figure>
+
+<h3>Layer 3 — agent runtime: typed risk signals, not a verdict (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — forced-schema risk assessment</button></div>
+  <div class="tab-panel">
+<pre><code># services/risk_agent.py
+from enum import Enum
+from pydantic import BaseModel, Field
+import anthropic
+
+class Dimension(str, Enum):
+    CORRECTNESS = "correctness_risk"
+    SECURITY = "security_risk"
+    BLAST_RADIUS = "blast_radius"
+    ROLLBACK_DIFFICULTY = "rollback_difficulty"
+    TEST_COVERAGE_DELTA = "test_coverage_delta"
+
+class RiskSignal(BaseModel):
+    dimension: Dimension
+    score: float = Field(ge=0.0, le=1.0)   # 0 = no risk, 1 = maximum risk
+    rationale: str
+    evidence_refs: list[str]               # file:line or eval-run ids
+
+class RiskAssessment(BaseModel):
+    pr_id: str
+    signals: list[RiskSignal]              # NOT a verdict — see gate.ts, Layer 2
+
+RISK_SCHEMA = RiskAssessment.model_json_schema()
+
+def assess(pr_id: str, diff: str, test_summary: str, eval_scores: dict) -> RiskAssessment:
+    client = anthropic.Anthropic()
+    resp = client.messages.create(
+        model="claude-sonnet-5",
+        max_tokens=2000,
+        tools=[{"name": "submit_risk_assessment", "input_schema": RISK_SCHEMA}],
+        tool_choice={"type": "tool", "name": "submit_risk_assessment"},  # forces the schema
+        messages=[{"role": "user", "content": (
+            f"PR {pr_id}. Diff:\n{diff}\n\nTests:\n{test_summary}\n\n"
+            f"Recent eval scores:\n{eval_scores}\n\n"
+            "Score every required dimension with evidence. Do not produce a "
+            "pass/fail recommendation — that decision is made downstream by "
+            "policy, not by you."
+        )}],
+    )
+    return RiskAssessment.model_validate(resp.content[0].input)
+</code></pre>
+  </div>
+</div>
+<p>The forced <code>tool_choice</code> is what makes this a schema, not a suggestion — the model physically cannot return a bare paragraph here the way the cold open's copilot did; see Claude's <a href="https://platform.claude.com/docs/en/build-with-claude/structured-outputs">structured outputs</a> docs for the underlying mechanism.</p>
+
+<h3>Layer 2 &amp; 4 — API + data: the deterministic gate and its audit trail (TypeScript + Postgres)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — pure gate function + endpoint</button></div>
+  <div class="tab-panel">
+<pre><code>// api/gate.ts
+type Verdict = "PASS" | "PASS_WITH_WARNINGS" | "BLOCK" | "ESCALATE";
+
+interface RiskSignal { dimension: string; score: number; rationale: string; evidence_refs: string[] }
+interface GatePolicy {
+  version: string;
+  block_threshold: Record&lt;string, number&gt;;
+  warn_threshold: Record&lt;string, number&gt;;
+  required_dimensions: string[];
+}
+
+// Pure: no I/O, no model call, no clock. Same inputs, same output, forever —
+// that reproducibility is the whole point of splitting this out of the agent.
+export function computeVerdict(signals: RiskSignal[], policy: GatePolicy): Verdict {
+  const byDim = new Map(signals.map(s => [s.dimension, s]));
+
+  const missing = policy.required_dimensions.filter(d => !byDim.has(d));
+  if (missing.length > 0) return "ESCALATE";   // fail closed, never fail open
+
+  if (signals.some(s => s.score >= (policy.block_threshold[s.dimension] ?? 1.1))) return "BLOCK";
+  if (signals.some(s => s.score >= (policy.warn_threshold[s.dimension] ?? 1.1))) return "PASS_WITH_WARNINGS";
+  return "PASS";
+}
+
+// CREATE TABLE gate_policy (
+//   version TEXT PRIMARY KEY,
+//   block_threshold JSONB NOT NULL,
+//   warn_threshold JSONB NOT NULL,
+//   required_dimensions TEXT[] NOT NULL,
+//   effective_at TIMESTAMPTZ NOT NULL DEFAULT now()
+// );
+// CREATE TABLE release_assessments (
+//   id SERIAL PRIMARY KEY,
+//   pr_id TEXT NOT NULL,
+//   signals JSONB NOT NULL,
+//   policy_version TEXT NOT NULL REFERENCES gate_policy(version),
+//   verdict TEXT NOT NULL,
+//   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+// );
+// CREATE TABLE gate_overrides (
+//   id SERIAL PRIMARY KEY,
+//   assessment_id INTEGER NOT NULL REFERENCES release_assessments(id),
+//   approved_by TEXT NOT NULL,
+//   reason TEXT NOT NULL,
+//   idempotency_key TEXT UNIQUE NOT NULL,
+//   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+// );
+
+app.post("/gate/evaluate", async (req, res) =&gt; {
+  const { pr_id, diff, test_summary, eval_scores } = req.body;
+
+  const assessment = await callRiskAgent(pr_id, diff, test_summary, eval_scores); // Layer 3
+  const policy = (await db.query&lt;GatePolicy&gt;(
+    `SELECT * FROM gate_policy WHERE effective_at &lt;= now() ORDER BY effective_at DESC LIMIT 1`
+  )).rows[0];
+
+  const verdict = computeVerdict(assessment.signals, policy);   // no model call
+
+  await db.query(
+    `INSERT INTO release_assessments (pr_id, signals, policy_version, verdict)
+     VALUES ($1, $2, $3, $4)`,
+    [pr_id, JSON.stringify(assessment.signals), policy.version, verdict]
+  );
+
+  await postGithubCheckRun(pr_id, verdict);
+  sseHub.publish(`pr:${pr_id}`, { type: "gate_verdict", verdict, signals: assessment.signals });
+
+  return res.json({ verdict, policy_version: policy.version, signals: assessment.signals });
+});
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 1 — frontend: a dashboard that can't quietly overturn a BLOCK (React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — React verdict card</button></div>
+  <div class="tab-panel">
+<pre><code>function GateVerdictCard({ assessment }: { assessment: GateAssessment }) {
+  const [overriding, setOverriding] = useState(false);
+
+  async function override(reason: string) {
+    if (overriding || !reason) return;
+    setOverriding(true);
+    await fetch(`/gate/override/${assessment.id}`, {
+      method: "POST",
+      // its own idempotency key, distinct from the tool-call key in Layer 3 —
+      // see Tool Design as API Design §3 for why those two keys must differ
+      headers: { "Idempotency-Key": `override-${assessment.id}` },
+      body: JSON.stringify({ reason }),
+    });
+    setOverriding(false);
+  }
+
+  return (
+    &lt;div className={`gate-card gate-${assessment.verdict.toLowerCase()}`}&gt;
+      &lt;h3&gt;{assessment.verdict}&lt;/h3&gt;
+      {assessment.signals.map(s =&gt; (
+        &lt;div key={s.dimension} className="signal-row"&gt;
+          &lt;span&gt;{s.dimension}&lt;/span&gt;
+          &lt;meter value={s.score} min={0} max={1} /&gt;
+          &lt;p&gt;{s.rationale}&lt;/p&gt;
+        &lt;/div&gt;
+      ))}
+      {(assessment.verdict === "BLOCK" || assessment.verdict === "ESCALATE") &amp;&amp; (
+        &lt;button disabled={overriding} onClick={() =&gt; override(prompt("Override reason:") ?? "")}&gt;
+          Override (reason required — logged to gate_overrides)
+        &lt;/button&gt;
+      )}
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+  </div>
+</div>
+<p>Nothing in this UI, or anywhere else, is allowed to write directly to the <code>verdict</code> column. The only way a <code>BLOCK</code> ships is through <code>/gate/override</code>, which appends a new, separately auditable row instead of mutating the original assessment — the same append-only discipline as an event log, applied to a governance decision instead of application state.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>The verdict is parsed out of prose.</strong> Symptom: the cold open — the stored "decision" is a substring match against a paragraph, the verdict flips on incidental wording, and a postmortem has nothing to inspect except the model's sentence, because no structured signal was ever recorded to explain the <em>why</em>.</li>
+<li><strong>Policy thresholds live in code, unversioned.</strong> Symptom: six months later, a postmortem asks which threshold let a risky change through, and answering requires <code>git blame</code>-ing the pipeline's source across every change since — the threshold that actually applied at assessment time is not recoverable from the current file, because nothing stamped the assessment row with a <code>policy_version</code> at write time.</li>
+<li><strong>A missing or degraded signal defaults to low risk instead of failing closed.</strong> Symptom: the diff-fetch tool times out, the agent receives an empty diff, and — having seen nothing risky — scores every dimension near zero with short, generic rationale text. The schema still validates (an empty diff is still valid input), so nothing errors; the assessment row just has suspiciously uniform low scores and thin <code>evidence_refs</code>, and nothing is watching for that shape. This is exactly why <code>computeVerdict</code> checks for <em>missing required dimensions</em> and forces <code>ESCALATE</code> rather than trusting a present-but-empty score.</li>
+<li><strong>The override path gets bypassed.</strong> Symptom: an engineer, or a script under time pressure, writes <code>verdict = 'PASS'</code> directly against the database or the GitHub check run instead of calling <code>/gate/override</code>. A compliance review that recomputes <code>computeVerdict(signals, policy)</code> for every stored row and diffs it against the stored <code>verdict</code> catches this immediately — a mismatch with no corresponding <code>gate_overrides</code> row is exactly the integrity gap the append-only override table exists to make detectable.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — full gate separation vs. a plain LLM summary</div>
+<p>Reach for the full split — typed signals, a versioned policy table, a pure gate function, an append-only override log — when the verdict drives an <em>unattended</em> action (auto-merge, auto-deploy, auto-rollback) or feeds an audit trail that a regulator or a postmortem needs to reproduce byte-for-byte later. Those are exactly the conditions under which "the model's paragraph was slightly ambiguous" turns into an incident instead of a mildly annoying re-read.</p>
+<p>Stay with a plain LLM summary — no schema, no gate function, no policy table — when a human reads the output and then takes their own action; a Slack digest telling an on-call engineer "here's what changed and why it might be risky" doesn't need a verdict enum, because the human is the disposition function in that flow. Building the machinery in this article for a message nobody automates against is solving a problem that doesn't exist yet.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> implement <code>computeVerdict</code> as a standalone, tested pure function, then prove through a running endpoint that it's genuinely deterministic.</p>
+<ol>
+<li>Create <code>gate.ts</code> with the <code>Verdict</code> type and <code>computeVerdict</code> from §3, exported with no other dependencies.</li>
+<li>Write four fixtures and unit tests (Vitest or Jest): <strong>(a)</strong> all signals low → expect <code>PASS</code>; <strong>(b)</strong> one dimension at/above <code>block_threshold</code> → expect <code>BLOCK</code>; <strong>(c)</strong> one dimension in the warn band only → expect <code>PASS_WITH_WARNINGS</code>; <strong>(d)</strong> a required dimension absent from the signals array → expect <code>ESCALATE</code>.</li>
+<li>Run the suite; all four must pass before moving on.</li>
+<li>Stand up a minimal Express app exposing <code>POST /gate/evaluate-fixture</code> that skips the real agent call, takes a <code>{ signals, policy }</code> body directly, calls <code>computeVerdict</code>, and returns <code>{ verdict }</code> as JSON.</li>
+<li><code>curl</code> it twice with the exact same fixture (d) from step 2: <code>curl -X POST localhost:3000/gate/evaluate-fixture -H "Content-Type: application/json" -d @missing-dimension.json</code>. Confirm both calls return <code>{"verdict":"ESCALATE"}</code>.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ All four fixtures pass their expected verdict in the unit test suite.</li>
+<li>✅ The missing-dimension fixture returns <code>ESCALATE</code> via <code>curl</code>, never <code>PASS</code> — proving the fail-closed branch actually runs outside the test harness too.</li>
+<li>✅ Two identical <code>curl</code> calls return byte-identical response bodies — the determinism the whole pattern exists to guarantee.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A PM asks: the agent already has the diff, the tests, and the eval scores in context — why not let it just output the verdict directly and skip the separate gate function?</strong></p>
+<p><em>Strong answer sketch: this conflates two different questions that need two different owners and two different reliability guarantees. "How risky does this change look" is a judgment call, inherently non-deterministic, and reasonably made by whichever model and prompt version happens to be live that day. "Given a risk profile, what does the organization do about it" is a policy decision — usually owned by a different team (security, compliance, an eng-risk council) than whoever writes the agent's prompt — and it has to be reproducible identically for the same inputs, on demand, indefinitely, because that's what an audit or a postmortem requires. A model call cannot serve as that policy oracle: model version drift, prompt edits, and non-zero temperature all mean the same signals scored twice can plausibly yield two different verdicts, which fails the basic replay test a compliance review will run. Splitting the two also lets each change independently — the risk-appetite team tightens a threshold without touching the agent's prompt, and the agent's model gets upgraded without silently renegotiating the organization's risk tolerance in the same commit. This is the general "agent proposes, deterministic engine disposes" boundary again: the model's job ends at typed, scored signals; a pure function no one has to trust is the only thing allowed to turn those into a verdict.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://platform.claude.com/docs/en/build-with-claude/structured-outputs">Claude — Structured outputs</a> (the forced-schema mechanism in §3 that keeps the agent from ever emitting a free-text verdict)</li>
+<li><a href="https://www.openpolicyagent.org/docs/policy-language">Open Policy Agent — Policy language (Rego)</a> (the policy-as-code precedent for a deterministic, versioned decision engine kept decoupled from the application calling it)</li>
+<li><a href="https://sre.google/sre-book/release-engineering/">Google SRE Book — Release Engineering</a> (the pre-LLM discipline of well-defined, auditable release policy that this pattern extends rather than replaces)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-24 · Stable: the proposal/disposition split and policy-as-code precedent aren't expected to change. Worth rechecking: the exact structured-outputs API surface cited in §3 — Anthropic has moved this capability from a beta header to a stable <code>output_config.format</code> parameter recently and the field names may shift again.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds on <a href="tool-design-as-api-design.html">Tool Design as API Design</a> (the idempotency-key discipline reused in §3's override endpoint) and <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a> (the same proposal/disposition boundary applied to a single tool call instead of a pipeline stage). Sets up a future Pillar 7 article on gating releases with eval scores, and a future Pillar 8 anti-pattern catalog entry on "autonomy theater" — automation that looks deterministic but secretly still routes through a model's prose.</p>
+
+<nav class="pager">
+  <a href="a2a-protocol-anatomy.html">← PREV — A2A Protocol Anatomy</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
