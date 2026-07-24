@@ -10,9 +10,9 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
 ## Priority 5 — SEO
 
-1. **PARTIALLY ADDRESSED (2026-07-17) for new content only** — No SEO
-   metadata anywhere in the *legacy* site. Audited all HTML files
-   (`index.html`, `articles/*.html`, `manual/*.html`): zero real
+1. **PARTIALLY ADDRESSED (2026-07-17, 2026-07-24)** — No SEO metadata
+   anywhere in the *legacy* site. Audited all HTML files (`index.html`,
+   `articles/*.html`, `manual/*.html`): zero real
    `<meta name="description">` tags, zero Open Graph tags, zero Twitter
    Card tags, zero `rel="canonical"` links, zero JSON-LD structured data.
    Some pages carry a "meta description" value only inside an HTML
@@ -22,10 +22,24 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    social sharing, Article/BlogPosting JSON-LD). **Fixed architecturally
    for the Astro pilot** (`site/` — see ADR-0001): its shared
    `BaseLayout` emits real meta description, canonical, OG, Twitter, and
-   JSON-LD tags automatically for every page built through it. **Still
-   open** for `index.html`, `manual/*.html`, and the 3 already-published
-   `articles/*.html` pages, none of which are covered by the Astro pilot
-   yet. Remains a good near-term, low-risk task for those specific files.
+   JSON-LD tags automatically for every page built through it.
+   **2026-07-24: fixed for `index.html` and the entire Articles stream**
+   (`articles/index.html` + all 3 published `articles/*.html` pages) —
+   real `<meta name="description">`, `rel="canonical"`, Open Graph,
+   Twitter Card, and JSON-LD (`WebSite`/`CollectionPage`/`BlogPosting`)
+   added to all 5 files. Descriptions reused verbatim from each article's
+   existing front-matter comment; canonical URLs use
+   `https://tseten1996.github.io/daily-ai-news/` as the inferred base
+   (no `CNAME` exists — this is the repo's default GitHub Pages
+   project-page URL; revisit if a custom domain is added). Verified: a
+   Python JSON-LD validator confirmed all 5 blocks parse; a headless
+   Playwright pass over all 5 pages confirmed 200 status, correct
+   `<meta name="description">`/canonical values, and zero real console
+   errors (the one `/favicon.ico` 404 observed is a pre-existing,
+   unrelated browser default — no favicon exists anywhere in this repo).
+   **Still open** for `manual/*.html` (7 files: index + 6 modules), none
+   of which are covered by the Astro pilot or this slice — see roadmap
+   "Immediate" for the follow-up.
 2. **OPEN — No `robots.txt` or `sitemap.xml`.** Neither file exists at the
    repo root. Crawlers have no sitemap to discover the ~19 content pages
    (16 trend topics live inside one `index.html`, but articles and manual
