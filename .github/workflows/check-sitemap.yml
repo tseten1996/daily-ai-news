@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Verify every published page is in sitemap.xml
+      - name: Verify sitemap.xml matches the generator
         run: ./scripts/check-sitemap.sh

@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-22 (fixed a recurring missing-sitemap-entry regression and added a verify-only CI check — see backlog #2, #10)
+Last reviewed: 2026-07-25 (sitemap staleness recurred a third time; replaced the hand-maintained `sitemap.xml` with a generator wired into deploy — see backlog #2)
 
 ## What this repository is
 
@@ -58,7 +58,7 @@ raw files with no build step; it does not build or publish anything from
 ```
 index.html              [legacy, live] Trends Board — home page, bookmark-card UI of daily AI trend topics
 robots.txt              Crawler policy; points at sitemap.xml (added 2026-07-18)
-sitemap.xml             Hand-maintained sitemap of all published pages (added 2026-07-18)
+sitemap.xml             Generated sitemap of all published pages (generator added 2026-07-25; see scripts/)
 articles/                [legacy, live] Long-form article stream ("The Daily AI News")
   index.html             Article listing page
   LEDGER.md              Append-only dedup ledger of published articles (topic/date/concepts)
@@ -71,9 +71,10 @@ site/                    [target, pilot — not deployed, not yet on main] Astro
   src/layouts/           BaseLayout (SEO: meta/OG/Twitter/JSON-LD) + ArticleLayout
   src/components/        Shared CodeTabs, Figure, Judgment, FailureBlock components
 SCHEDULED_TASK_PROMPT.md Operating spec for the daily content-generation agent run
-scripts/                 check-sitemap.sh — verify-only sitemap-completeness check, run in CI
-.github/workflows/       deploy-pages.yml (deploys repo root to GitHub Pages on push to main);
-                         check-sitemap.yml (fails CI if a published page is missing from sitemap.xml)
+scripts/                 generate-sitemap.sh — regenerates sitemap.xml from published pages + git history;
+                         check-sitemap.sh — fails if the committed sitemap.xml drifts from the generator
+.github/workflows/       deploy-pages.yml (regenerates sitemap.xml, then deploys repo root to GitHub Pages on push to main);
+                         check-sitemap.yml (fails CI if sitemap.xml is out of sync with the generator)
 docs/                    This knowledge base (architecture-review agent's memory)
 ```
 
@@ -139,12 +140,17 @@ card-rendering script; module pages' tab-switching JS).
 ## Build & deploy pipeline
 
 **Legacy site:** deployed via `.github/workflows/deploy-pages.yml`, which
-uploads the entire repo root to GitHub Pages on push to `main` — no build
-step, no lint/type-check. As of 2026-07-22, a second, independent workflow
-(`.github/workflows/check-sitemap.yml`) runs `scripts/check-sitemap.sh` on
-every push/PR and fails the check if a published page is missing from
-`sitemap.xml` — a verify-only gate that doesn't affect what
-`deploy-pages.yml` ships. Beyond that one structural check, "verification"
+uploads the entire repo root to GitHub Pages on push to `main` — no lint
+or type-check, but as of 2026-07-25 it does run one generation step:
+`scripts/generate-sitemap.sh` regenerates `sitemap.xml` from the
+published pages on disk immediately before the Pages artifact is
+uploaded, so the live sitemap is always correct regardless of what was
+committed. A second, independent workflow
+(`.github/workflows/check-sitemap.yml`) runs `scripts/check-sitemap.sh`
+on every push/PR and fails the check if the *committed* `sitemap.xml`
+has drifted from the generator's output — a verify-only gate that
+doesn't affect what `deploy-pages.yml` ships. Beyond that one structural
+check, "verification"
 for the daily content-authoring run is still manual/agent-driven (opening
 pages in a headless browser via Playwright per
 `SCHEDULED_TASK_PROMPT.md`'s "Finish every run" section), not an automated

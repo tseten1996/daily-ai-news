@@ -28,26 +28,38 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    yet. High value, low risk — likely needs splitting: (a) add real
    `<meta description>` + canonical + OG/Twitter tags per page first
    (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
-   article/module page as a follow-up slice.
-2. **DONE (2026-07-18); hardened 2026-07-22** — `robots.txt` and a
-   hand-maintained `sitemap.xml` added at the repo root. **This recurred
-   twice**: the 2026-07-19 daily content run published a new article
-   without a matching sitemap entry (caught and fixed same-day, plus a
-   reminder step added to `SCHEDULED_TASK_PROMPT.md`'s "finish every run"
-   checklist) — and it recurred again on 2026-07-22, when
-   `articles/tool-descriptions-are-prompts.html` shipped without a
-   sitemap entry despite that reminder already being in place. Two
-   recurrences of the same gap despite a documentation-only fix showed
-   the prose reminder alone wasn't sufficient. **Fix applied 2026-07-22:**
-   fixed the missing entry again, and added `scripts/check-sitemap.sh` +
-   `.github/workflows/check-sitemap.yml` — a verify-only CI check
-   (doesn't touch what ships, doesn't gate `deploy-pages.yml`) that fails
-   the "Check sitemap freshness" status check on any push/PR where a
-   published legacy HTML page has no matching `sitemap.xml` `<loc>`.
-   Confirmed the check actually catches this exact regression (ran it
-   against the pre-fix commit — failed as expected; passes after the
-   fix). Sitemap staleness should no longer depend on a human or agent
-   remembering to check by hand.
+   article/module page as a follow-up slice. **Note (2026-07-25):** PR #11
+   ("Add real SEO meta tags to Articles pages", open since 2026-07-20,
+   targets `main`) already proposes this for `articles/*.html`. A future
+   run picking up slice (a) should check whether #11 has merged first and
+   scope to `index.html` + `manual/*.html` if so, to avoid duplicating
+   in-flight work.
+2. **DONE (2026-07-18); hardened 2026-07-22; root-caused 2026-07-25** —
+   `robots.txt` and `sitemap.xml` at the repo root. **Went stale three
+   times.** 2026-07-19: a new article shipped without a sitemap entry
+   (fixed same-day; added a prose reminder to
+   `SCHEDULED_TASK_PROMPT.md`). 2026-07-22: recurred anyway
+   (`articles/tool-descriptions-are-prompts.html` missing) — added
+   `scripts/check-sitemap.sh` + `.github/workflows/check-sitemap.yml`, a
+   verify-only CI check for missing entries. 2026-07-25: recurred a
+   *third* time (`articles/mcp-anatomy-hosts-clients-servers-primitives.html`
+   missing) — the CI check exists but is non-blocking, and nothing was
+   watching its status before the next commit landed. That same audit
+   found a **second, previously-undetected class of drift**: an existing
+   entry (`context-compaction-for-long-running-agents.html`) carried a
+   `<lastmod>` one day off from its real last commit — the missing-entry
+   check never covered stale dates at all. **Fix applied 2026-07-25:**
+   replaced the hand-maintained file with `scripts/generate-sitemap.sh`,
+   which derives every entry (URL, priority, changefreq, and `<lastmod>`
+   from each page's own `git log`) mechanically from the published pages
+   on disk. `check-sitemap.sh` now diffs the committed file against the
+   generator's output (catches staleness of any kind, not just missing
+   URLs) and `deploy-pages.yml` runs the generator itself right before
+   uploading the Pages artifact — so the *live* sitemap is always correct
+   even if a future commit forgets to regenerate the checked-in copy, and
+   the generator step cannot fail the deploy (it only ever regenerates,
+   never errors on drift). This removes the human-memory dependency
+   entirely rather than adding a fourth reminder.
 3. **OPEN — No RSS/Atom feed.** Domain standards call for an RSS feed for
    a blog platform; none exists. Would need a decision on whether it's
    hand-maintained XML (consistent with the no-build-step philosophy) or

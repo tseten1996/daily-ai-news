@@ -1,22 +1,26 @@
 # Roadmap
 
-Last reviewed: 2026-07-22. Fixed a recurring missing-sitemap-entry
-regression (a new article shipped without one for the second time despite
-a documentation-only reminder) and added `.github/workflows/check-sitemap.yml`
-as a verify-only CI check so this class of gap no longer depends on a
-human or agent remembering to check by hand (backlog #2, #10). The
-Immediate items below are otherwise unchanged from the 2026-07-21 review.
+Last reviewed: 2026-07-25. The 2026-07-22 CI check (verify-only,
+missing-entries-only) still let sitemap staleness recur a third time and
+missed a second class of drift (stale `<lastmod>` dates) entirely.
+Replaced the hand-maintained `sitemap.xml` with a generator
+(`scripts/generate-sitemap.sh`) wired into `deploy-pages.yml`, so the
+live sitemap can no longer go stale regardless of what's committed
+(backlog #2). The Immediate items below are otherwise unchanged from the
+2026-07-22 review, with one addition: PR #11 (open since 2026-07-20)
+already covers the `articles/*.html` slice of the SEO-meta-tags item.
 
 ## Immediate (next 1-3 runs)
 
 - **Add real SEO meta tags per page** (backlog #1, slice a): unique
   `<meta name="description">`, `rel="canonical"`, Open Graph, and Twitter
   Card tags on `index.html`, `articles/*.html`, and `manual/*.html` (now
-  15 pages total — likely needs its own slicing across 2+ runs to stay
-  under the ~10-file-per-run guideline). Mechanical, low-risk,
-  high-value — the top open SEO item since `robots.txt`/`sitemap.xml`
-  landed 2026-07-18. Unaffected by the Astro pilot, which only covers
-  new Articles-stream content going forward.
+  16 pages total). PR #11 (open since 2026-07-20) already proposes this
+  for the 7 `articles/*.html` files — check whether it has merged before
+  picking this up; if it has, scope to the remaining `index.html` +
+  `manual/*.html` (9 files). Mechanical, low-risk, high-value. Unaffected
+  by the Astro pilot, which only covers new Articles-stream content going
+  forward.
 - **Fix Trends Board heading hierarchy** (backlog #4): confirm intended
   outline, close the h2→h4 gap.
 - **Wire `site/` into CI/deploy, or decide not to.** Now that the pilot's
