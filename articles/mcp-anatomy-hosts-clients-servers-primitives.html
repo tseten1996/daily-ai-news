@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP Anatomy: Hosts, Clients, Servers, and the Primitives That Actually Ship Code · The Daily AI News</title>
+<meta name="description" content="The Model Context Protocol's host/client/server model and its five primitives (tools, resources, prompts, sampling, roots) explained at mechanism level — with a minimal TypeScript server, a Python host connection, and the failure modes that show up the moment a second server joins the room.">
+<link rel="canonical" href="https://tseten1996.github.io/daily-ai-news/articles/mcp-anatomy-hosts-clients-servers-primitives.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MCP Anatomy: Hosts, Clients, Servers, and the Primitives That Actually Ship Code">
+<meta property="og:description" content="The Model Context Protocol's host/client/server model and its five primitives, explained at mechanism level — with runnable code and the failure modes that show up in production.">
+<meta property="og:url" content="https://tseten1996.github.io/daily-ai-news/articles/mcp-anatomy-hosts-clients-servers-primitives.html">
+<meta property="og:site_name" content="The Daily AI News">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="MCP Anatomy: Hosts, Clients, Servers, and the Primitives That Actually Ship Code">
+<meta name="twitter:description" content="The host/client/server model and five primitives that make MCP a protocol instead of a convention — mechanism-level, with code and failure modes.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "MCP Anatomy: Hosts, Clients, Servers, and the Primitives That Actually Ship Code",
+  "description": "The Model Context Protocol's host/client/server model and its five primitives (tools, resources, prompts, sampling, roots) explained at mechanism level — with a minimal TypeScript server, a Python host connection, and the failure modes that show up the moment a second server joins the room.",
+  "datePublished": "2026-07-25",
+  "url": "https://tseten1996.github.io/daily-ai-news/articles/mcp-anatomy-hosts-clients-servers-primitives.html",
+  "author": { "@type": "Organization", "name": "The Daily AI News" },
+  "publisher": { "@type": "Organization", "name": "The Daily AI News" }
+}
+</script>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: MCP Anatomy: Hosts, Clients, Servers, and the Primitives That Actually Ship Code
+  slug: mcp-anatomy-hosts-clients-servers-primitives
+  pillar: Pillar 4 — MCP, Skills & Hooks
+  difficulty: Foundations
+  series: none (standalone; first Pillar 4 article — sets up building-an-MCP-server-in-Python/TypeScript and MCP-security articles)
+  tags: mcp, model-context-protocol, json-rpc, tool-primitives, agent-runtime, protocol-architecture
+  meta description: The Model Context Protocol's host/client/server model and its five primitives (tools, resources, prompts, sampling, roots) explained at mechanism level — with a minimal TypeScript server, a Python host connection, and the failure modes that show up the moment a second server joins the room.
+  read time: ~10 min (~1,850 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · MCP, SKILLS &amp; HOOKS</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 4 · MCP, Skills &amp; Hooks</div>
+  <h1>MCP Anatomy: Hosts, Clients, Servers, and the Primitives That Actually Ship Code</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Every team that adopts MCP treats it as "the way you give an agent a tool" for about two weeks, then hits a wall the marketing never mentioned: a second server, a third, a fourth, and suddenly nobody can say which one owns a given capability, why one hangs on stdout, or why a resource the model can clearly see never shows up in a tool call. The protocol has an actual architecture underneath the acronym. This is it.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-25</b></span>
+    <span>DIFFICULTY <b>Foundations</b></span>
+    <span>READ <b>~10 min (~1,850 words)</b></span>
+    <span>LAB <b>run a minimal MCP server and inspect its primitives over stdio</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A team wires up three MCP servers into their coding agent — one for their internal ticket tracker, one for a Postgres read replica, one for their deploy pipeline — and within a day the agent starts calling <code>get_ticket</code> when the user asked about a deploy, and <code>trigger_deploy</code> when the user asked to read a ticket. Nobody wrote a routing bug; there's no router to have a bug. All three servers publish flat, generically-named tool lists into the same context window, and the model is picking the plausible-sounding one under whatever the current prompt's framing happens to favor. The team spends an afternoon assuming their harness has a wiring problem before someone actually reads the MCP spec's connection model and realizes the tools were never supposed to be indistinguishable in the first place — the protocol has a place for scoping and provenance, and nobody was using it.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>Before MCP (Anthropic, November 2024), every agent framework that wanted to call a ticket tracker, a database, and a deploy pipeline wrote three bespoke integrations, each with its own auth handling, its own way of describing itself to the model, and its own error-surfacing conventions. Swapping frameworks meant rewriting every integration from scratch — the classic <code>M×N</code> problem: M agent frameworks, N tools, no shared interface, so the integration burden grows with the product of both instead of the sum.</p>
+<p>MCP's answer is deliberately narrow: standardize the wire protocol and the small set of primitives a tool provider can expose, and leave everything above that — how the model decides what to call, how a UI renders the result — to the host. That's the trade teams misjudge on first contact: MCP is not an orchestration framework, and it has no opinion on your agent loop. It's closer to what LSP did for editors and language servers a decade earlier — one protocol, N backends, M clients, nobody writes the cross product. Get the anatomy right and a server built for one host works unmodified in the next one; get it wrong and you've just reinvented bespoke integrations with extra JSON-RPC ceremony on top.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>Three roles, one connection rule, five primitives. The <b>host</b> is the application the user actually opens — a coding agent, a chat client, an IDE plugin — and it owns the LLM conversation, the UI, and which servers are even in scope this session. The host doesn't talk to servers directly; it instantiates one <b>client</b> per server, and each client keeps a strictly one-to-one, stateful connection to its server. That 1:1 rule is what teams skip past fastest and pay for later: it's what stops one compromised or misbehaving server from seeing traffic meant for another, and it's why a host with three servers has three separate client objects, not one client juggling three connections.</p>
+<p>A <b>server</b> is a lightweight, focused process — often wrapping one existing system (a database, a SaaS API, a filesystem) — that exposes some subset of five primitives over JSON-RPC 2.0. Three live on the server side: <b>tools</b> (model-invoked actions with side effects, e.g. <code>create_ticket</code>), <b>resources</b> (addressable, mostly read-only context the host can attach to a conversation, each with a URI), and <b>prompts</b> (reusable, server-defined templates a user invokes explicitly, e.g. a slash command). Two live on the client side, which most first-time implementers miss because it inverts the direction they expect: <b>sampling</b> lets a server ask the host's client to run an LLM completion on the server's behalf, so a server doesn't need its own API key or model access, and <b>roots</b> let a client tell a server which directories or resources are actually in scope, so a filesystem server doesn't default to the whole disk. Transport is JSON-RPC 2.0 over either <b>stdio</b> (host spawns the server as a subprocess, talks over stdin/stdout — the default for local, trusted tools) or <b>Streamable HTTP</b> (for remote servers; see <a href="streaming-agent-output-to-the-browser.html">Streaming Agent Output to the Browser</a> for the SSE mechanics that transport reuses).</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 430" role="img" aria-label="Diagram: a host application instantiates one client per server, maintaining a strict one-to-one connection each; each server exposes tools, resources, and prompts, and can call back into its client for sampling; clients pass roots down to scope server access.">
+  <defs>
+    <marker id="ta3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">HOST (frontend + agent runtime)</text>
+  <rect x="20" y="32" width="840" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+  <text x="440" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">chat/agent UI + LLM conversation loop — decides which servers are in scope this session</text>
+  <text x="440" y="67" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">instantiates one Client object per connected server</text>
+
+  <rect x="40" y="120" width="230" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="155" y="145" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Client A — 1:1</text>
+  <rect x="325" y="120" width="230" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="440" y="145" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Client B — 1:1</text>
+  <rect x="610" y="120" width="230" height="40" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="725" y="145" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Client C — 1:1</text>
+  <path d="M155 78 L155 116" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+  <path d="M440 78 L440 116" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+  <path d="M725 78 L725 116" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <text x="40" y="196" class="svg-label" font-size="9" fill="var(--muted)">JSON-RPC 2.0 — stdio (local) or Streamable HTTP (remote)</text>
+  <path d="M155 160 L155 214" fill="none" stroke="var(--ink)" stroke-width="1.2" marker-end="url(#ta3)"/>
+  <path d="M440 160 L440 214" fill="none" stroke="var(--ink)" stroke-width="1.2" marker-end="url(#ta3)"/>
+  <path d="M725 160 L725 214" fill="none" stroke="var(--ink)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <rect x="40" y="222" width="230" height="90" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="4 3"/>
+  <text x="155" y="242" text-anchor="middle" class="svg-label" font-size="9.5" font-weight="700" fill="var(--ink)">Server: tickets</text>
+  <text x="155" y="260" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">tools: create_ticket, close_ticket</text>
+  <text x="155" y="274" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">resources: ticket://{id}</text>
+  <text x="155" y="288" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">prompts: /triage</text>
+
+  <rect x="325" y="222" width="230" height="90" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="4 3"/>
+  <text x="440" y="242" text-anchor="middle" class="svg-label" font-size="9.5" font-weight="700" fill="var(--ink)">Server: postgres-ro</text>
+  <text x="440" y="260" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">tools: run_query</text>
+  <text x="440" y="274" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">resources: schema://{table}</text>
+  <text x="440" y="288" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--warn)">roots scope which schemas</text>
+
+  <rect x="610" y="222" width="230" height="90" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+  <text x="725" y="242" text-anchor="middle" class="svg-label" font-size="9.5" font-weight="700" fill="var(--ink)">Server: deploy</text>
+  <text x="725" y="260" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">tools: trigger_deploy</text>
+  <text x="725" y="274" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">sampling: asks Client C's</text>
+  <text x="725" y="288" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">host LLM to summarize a diff</text>
+
+  <path d="M725 312 L725 330 L500 330" fill="none" stroke="var(--warn)" stroke-width="1.2" stroke-dasharray="3 2" marker-end="url(#ta3)"/>
+  <text x="470" y="360" text-anchor="end" class="svg-label" font-size="8.5" fill="var(--warn)">sampling/createMessage — server-initiated,</text>
+  <text x="470" y="373" text-anchor="end" class="svg-label" font-size="8.5" fill="var(--warn)">routed back through the OWNING client only</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — Three servers, three clients, three isolated connections. A ticket server never sees deploy-server traffic because there is no shared client to leak through — the 1:1 rule is the isolation boundary, not a convention layered on top of it.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  H["Host: chat/agent UI + LLM loop"] --> CA["Client A (1:1)"]
+  H --> CB["Client B (1:1)"]
+  H --> CC["Client C (1:1)"]
+  CA -->|stdio JSON-RPC| SA["Server: tickets\ntools + resources + prompts"]
+  CB -->|stdio JSON-RPC| SB["Server: postgres-ro\ntools + resources, roots-scoped"]
+  CC -->|Streamable HTTP| SC["Server: deploy\ntools + sampling callback"]
+  SC -.sampling/createMessage.-> CC</pre>
+</details>
+</figure>
+
+<h3>Layer 3 — agent runtime: a minimal MCP server (TypeScript)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — stdio server exposing one tool + one resource</button></div>
+  <div class="tab-panel">
+<pre><code>// npm install @modelcontextprotocol/sdk zod
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+
+const server = new McpServer({ name: "tickets", version: "1.0.0" });
+
+// TOOL — model-invoked, has a side effect. The description IS part of
+// the prompt the model reasons over; see the failure modes below.
+server.tool(
+  "create_ticket",
+  "Create a support ticket. Use only when the user explicitly asks " +
+  "to file, log, or open a ticket — never for read-only questions.",
+  { title: z.string(), body: z.string(), priority: z.enum(["low", "high"]) },
+  async ({ title, body, priority }) => {
+    const id = await db.insertTicket({ title, body, priority });
+    return { content: [{ type: "text", text: `Created ticket ${id}` }] };
+  }
+);
+
+// RESOURCE — addressable context, not a model-invoked action. The host
+// decides when to attach it; the model doesn't "call" a resource.
+server.resource(
+  "ticket",
+  new ResourceTemplate("ticket://{id}", { list: undefined }),
+  async (uri, { id }) => ({
+    contents: [{ uri: uri.href, text: await db.getTicketText(id) }],
+  })
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — agent runtime: a host connecting to it (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — host-side client, one connection per server</button></div>
+  <div class="tab-panel">
+<pre><code># pip install mcp
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+params = StdioServerParameters(command="node", args=["tickets-server.js"])
+
+async def run():
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()  # capability negotiation handshake
+
+            tools = await session.list_tools()
+            # The host, not the server, decides what reaches the model's
+            # context — this is the scoping point the cold open skipped.
+            visible = [t for t in tools.tools if t.name in ALLOWED_FOR_SESSION]
+
+            result = await session.call_tool(
+                "create_ticket",
+                {"title": "Deploy failed", "body": "...", "priority": "high"},
+            )
+            print(result.content)
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 4 — data/infra: persisting which servers a session may see (SQL)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">SQL — session-scoped server allowlist</button></div>
+  <div class="tab-panel">
+<pre><code>CREATE TABLE session_mcp_servers (
+  session_id   TEXT NOT NULL,
+  server_name  TEXT NOT NULL,          -- 'tickets', 'postgres-ro', 'deploy'
+  connected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  disconnected_at TIMESTAMPTZ,          -- NULL while still in scope
+  PRIMARY KEY (session_id, server_name)
+);
+
+-- On resume, the host re-derives ALLOWED_FOR_SESSION from this table
+-- instead of trusting whatever the client happened to connect to last —
+-- a user who disconnected "deploy" mid-session must not silently regain
+-- it just because the process restarted.
+SELECT server_name FROM session_mcp_servers
+WHERE session_id = $1 AND disconnected_at IS NULL;
+</code></pre>
+  </div>
+</div>
+<p>Notice what each layer actually owns: the server (Layer 3, wrapped process) defines the primitive and its schema; the host's client code (also Layer 3, but the calling side) decides which of the server's advertised tools are even visible to this session's model — filtering, namespacing, and per-server tool prefixes all happen here, not in the protocol. The <code>ALLOWED_FOR_SESSION</code> check in the Python snippet above is exactly what that Layer 4 table backs: a production host derives it from the database on every resume, not from in-memory state that a restart would reset back to "everything visible."</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>Tool-name collisions across servers.</strong> Symptom: the cold open — the model calls the wrong server's tool, or your harness throws <code>ambiguous tool name: run_query</code> at startup. Two servers expose a generically-named tool and the host flattened both into one namespace without prefixing. Fix at the host: namespace every tool as <code>{server_name}.{tool_name}</code> before it reaches the model's context — the same discipline <a href="tool-design-as-api-design.html">Tool Design as API Design</a> argues for per-tool, applied one level up at the connection level.</li>
+<li><strong>A resource the model "sees" never gets attached.</strong> Symptom: a user asks about a file the agent clearly listed moments ago, and the model answers as if it's never seen it. Resources are addressable, not auto-injected — <code>resources/list</code> tells the host what's available, but something in the host still has to explicitly call <code>resources/read</code> and attach the content. Teams that treat resources like tools the model can just "call" hit this immediately.</li>
+<li><strong>Sampling requests hang or get silently dropped.</strong> Symptom: a server-side trace shows a <code>sampling/createMessage</code> request sent, then nothing — no error, no timeout. Most hosts don't implement sampling by default (it means letting a server spend the user's model budget), and a server that assumes otherwise hangs on a host that silently doesn't support it. Check <code>capabilities.sampling</code> from the <code>initialize</code> handshake before issuing the request.</li>
+<li><strong>stdio server writes a stray line to stdout.</strong> Symptom: the client throws a JSON parse error on an otherwise-working server, correlated with nothing in your own code. stdio transport treats every stdout line as a JSON-RPC message — a leftover <code>console.log</code>, or a dependency that logs to stdout by default, corrupts the stream. Logs must go to stderr, always, for any stdio server.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — stdio vs. Streamable HTTP</div>
+<p>Reach for <b>stdio</b> when the server and host run on the same machine, the server is trusted (you wrote it, or it ships with your own toolchain), and you want zero network surface to secure — a local filesystem server or an internal CLI wrapper are the common case. It's simpler to deploy (no auth, no TLS) and there's no network hop, but it doesn't scale past one host process and can't be shared across users or sessions.</p>
+<p>Reach for <b>Streamable HTTP</b> the moment the server is remote, shared across multiple users or hosts, or needs real authentication and authorization — a company-wide ticket server or a SaaS-hosted MCP endpoint. It costs you an OAuth flow and a network dependency, but it's the only option that lets one server instance serve many hosts concurrently. Don't default to HTTP for a server only your own agent will ever call — that's paying the remote-server tax for a problem you don't have.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> run the TypeScript server from §3, connect the official MCP Inspector to it over stdio, and confirm you can see and exercise all three of its server-side primitives without writing a host at all.</p>
+<ol>
+<li>Save the §3 TypeScript snippet as <code>tickets-server.js</code> (compile or run via <code>tsx</code>), stub <code>db.insertTicket</code>/<code>db.getTicketText</code> to return in-memory fake data.</li>
+<li>Run <code>npx @modelcontextprotocol/inspector node tickets-server.js</code> — this launches a local web UI that speaks the client role of the protocol.</li>
+<li>In the Inspector's browser UI, open the "Tools" tab and confirm <code>create_ticket</code> appears with its full description and Zod-derived JSON schema.</li>
+<li>Call <code>create_ticket</code> from the Inspector with a sample payload and confirm the response content matches what your stub returns.</li>
+<li>Open the "Resources" tab, request <code>ticket://demo-1</code>, and confirm the resource read path works independently of the tool call — this is the resources-vs-tools distinction from failure mode 2, made concrete.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ The Inspector's Tools tab lists <code>create_ticket</code> with the exact description string from the source, proving the description text is transmitted verbatim as protocol data, not summarized.</li>
+<li>✅ A tool call round-trips a response visible in the Inspector's history pane.</li>
+<li>✅ A resource read via <code>ticket://{id}</code> succeeds without going through <code>call_tool</code> at any point.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>Your team is building a host that will eventually connect to a dozen MCP servers, some internal and some third-party. A teammate proposes flattening every server's tools into one global list in the system prompt so the model has "everything available" on every turn. What breaks as the server count grows, and what would you do instead?</strong></p>
+<p><em>Strong answer sketch: three things degrade as the flat list grows. Context cost — every tool's name, description, and schema burns tokens on every turn regardless of need, and a dozen servers can easily add thousands of dead-weight tokens per request. Selection accuracy — the cold open's collision problem generalizes: the larger and more homogeneous the list, the more often the model picks a plausible-sounding wrong tool, especially across servers with overlapping domains. Blast radius — a flat list gives every session access to every server's most dangerous tool (a deploy trigger next to a read-only lookup) with no way to say "this conversation shouldn't see that." The fix is to make server selection an explicit, host-owned decision instead of an implicit one made by cramming everything into context: scope which servers connect per session or task, namespace every tool with its owning server so the model's choice is legible in a trace, and route side-effecting calls through an approval surface keyed by server identity — third-party servers face stricter human-in-the-loop gates than internal ones by default. Same principle as idempotency-key minting in <a href="tool-design-as-api-design.html">Tool Design as API Design</a>: the model should never be the one deciding what's even in scope.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://modelcontextprotocol.io/docs/learn/architecture">Model Context Protocol — Architecture overview</a> (the canonical host/client/server description and the 1:1 connection rule this article builds on)</li>
+<li><a href="https://modelcontextprotocol.io/specification/2025-06-18/server/tools">MCP Specification 2025-06-18 — Tools</a> (the currently-deployed tool-primitive schema and the <code>isError</code> result shape)</li>
+<li><a href="https://blog.modelcontextprotocol.io/posts/2026-mcp-roadmap/">MCP Blog — The 2026 MCP Roadmap</a> (background on where the stateless/Extensions revision below is headed)</li>
+<li><a href="https://github.com/modelcontextprotocol/typescript-sdk">modelcontextprotocol/typescript-sdk</a> (the SDK used in §3's server example, plus reference server implementations worth reading end to end)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-25 · Stable: the host/client/server model, the 1:1 connection rule, and the five primitives (tools, resources, prompts, sampling, roots) described here are architectural and not expected to change. Volatile: a spec revision dated 2026-07-28 is landing days after this article publishes — it removes the stateful <code>initialize</code>/<code>Mcp-Session-Id</code> handshake in favor of a stateless protocol core and adds a formal Extensions framework, but per the MCP team's own release notes the primitives and the host/client/server roles described in §3 are explicitly preserved. Re-verify transport and session-handling details against the current spec revision before shipping.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: Pillar 4's "building an MCP server in Python/TypeScript" and "MCP security (tool poisoning, confused deputies)" articles — this piece is the prerequisite anatomy both assume. Pairs with <a href="tool-design-as-api-design.html">Tool Design as API Design</a> for the contract discipline an individual MCP tool still needs once it's wired up, <a href="streaming-agent-output-to-the-browser.html">Streaming Agent Output to the Browser</a> for the SSE mechanics underneath Streamable HTTP transport, and — once a server's tools are in front of a model — <a href="tool-descriptions-are-prompts.html">Tool Descriptions Are Prompts</a> and <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a> for the description-drift and policy-gate concerns this piece deliberately leaves out of scope.</p>
+
+<nav class="pager">
+  <a href="release-confidence-agent-deterministic-gate-verdict.html">← PREV — Release-Confidence Agent Case Study</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
