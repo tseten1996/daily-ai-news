@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Taxonomies for Agents: Episodic, Semantic, and Procedural State in Production · The Daily AI News</title>
+<meta name="description" content="Why lumping everything an agent 'remembers' into one vector store breaks down in production, and how to split it into episodic, semantic, and procedural memory with the right invariants for each — across the frontend, API, agent runtime, and database layers.">
+<link rel="canonical" href="https://tseten1996.github.io/daily-ai-news/articles/memory-taxonomies-for-agents.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Memory Taxonomies for Agents: Episodic, Semantic, and Procedural State in Production">
+<meta property="og:description" content="Why lumping everything an agent 'remembers' into one vector store breaks down in production, and how to split it into episodic, semantic, and procedural memory with the right invariants for each.">
+<meta property="og:url" content="https://tseten1996.github.io/daily-ai-news/articles/memory-taxonomies-for-agents.html">
+<meta property="og:site_name" content="The Daily AI News">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Memory Taxonomies for Agents: Episodic, Semantic, and Procedural State in Production">
+<meta name="twitter:description" content="Splitting agent memory into episodic, semantic, and procedural stores — with the schema, retrieval, and failure modes for each.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Memory Taxonomies for Agents: Episodic, Semantic, and Procedural State in Production",
+  "description": "Why lumping everything an agent 'remembers' into one vector store breaks down in production, and how to split it into episodic, semantic, and procedural memory with the right invariants for each — across the frontend, API, agent runtime, and database layers.",
+  "datePublished": "2026-07-26",
+  "url": "https://tseten1996.github.io/daily-ai-news/articles/memory-taxonomies-for-agents.html",
+  "author": { "@type": "Organization", "name": "The Daily AI News" },
+  "publisher": { "@type": "Organization", "name": "The Daily AI News" }
+}
+</script>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Memory Taxonomies for Agents: Episodic, Semantic, and Procedural State in Production
+  slug: memory-taxonomies-for-agents
+  pillar: Pillar 2 — Reasoning & Context Engineering
+  difficulty: Practitioner
+  series: none (standalone; sets up a future Pillar 2 article on Redis-backed external context stores and Pillar 5's data-freshness-vs-agent-memory piece)
+  tags: agent-memory, context-engineering, pgvector, postgres, retrieval, multi-tenant-agents
+  meta description: Why lumping everything an agent 'remembers' into one vector store breaks down in production, and how to split it into episodic, semantic, and procedural memory with the right invariants for each — across the frontend, API, agent runtime, and database layers.
+  read time: ~11 min (~1,780 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · REASONING &amp; CONTEXT ENGINEERING</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 2 · Reasoning &amp; Context Engineering</div>
+  <h1>Memory Taxonomies for Agents: Episodic, Semantic, and Procedural State in Production</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">One vector table called <code>memories</code> feels like enough right up until an agent contradicts itself, leaks one customer's history into another's session, or keeps applying a rule that a system-prompt update retired last sprint. Those are three different bugs with three different fixes, because "what an agent remembers" was never really one thing.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-26</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~11 min (~1,780 words)</b></span>
+    <span>LAB <b>stand up a bitemporal semantic-fact store and prove stale facts expire</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A support agent tells a customer, cheerfully, that their Pro-tier priority queue kicked in for the ticket they just filed. The customer downgraded to the free tier four days ago. The trace shows the retrieval step pulled a "fact" — <code>plan: Pro</code> — from the vector store with a similarity score of 0.91, comfortably above threshold. It's not wrong because the embedding was bad; it's wrong because the store has two rows for this customer's plan, one from four days ago and one from four months ago, and nothing in the schema ever marked either one as superseded. The agent didn't hallucinate. It retrieved real data and had no way to know which real data was current.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>The first generation of "agents with memory" solved recall by brute force: stuff the whole conversation history back into the context window every turn. That works until the conversation, or the relationship with a user, outlives the window — a customer who's messaged support eleven times over six months has no chance of fitting in 200K tokens of raw transcript, and even if it fit, nothing prioritizes the one fact that matters over ten turns of pleasantries.</p>
+<p>The second generation fixed the size problem and reintroduced a correctness problem: embed every message, event, and extracted fact into one vector store, and retrieve top-k by similarity at the start of each turn. This is where most production agents sit today, and it works well enough to ship — until the store accumulates enough history that similarity search alone can't tell "this is what's true now" apart from "this was true once," or "this happened" apart from "this is a rule I should always follow." Cognitive science drew this line decades ago — Endel Tulving's split of long-term memory into episodic (events, tied to a time and place) and semantic (facts, detached from when you learned them) — and systems like MemGPT (now Letta) and mem0 rebuilt versions of that split for LLM agents because undifferentiated similarity search kept failing in exactly the way the cold open shows. The missing piece those frameworks add, and the one this article focuses on building yourself: a third category, procedural memory — the learned "how we do things here" rules that need to be versioned against the system prompt they were derived from, not just retrieved by similarity.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>Three memory types, three different invariants, three different tables — unified only at the retrieval step, not in storage:</p>
+<p><strong>Episodic</strong> — what happened, and when. Append-only, timestamped, never edited. "User asked to cancel order #4471 on 2026-07-20." Retrieval favors recency; nothing here is ever "current" or "stale," it just ages.<br>
+<strong>Semantic</strong> — what's true about an entity right now. Mutable, but only by superseding, never by overwrite: a fact has an <code>effective_at</code> and an <code>expired_at</code>, and updating it means closing the old row and opening a new one, so a point-in-time query is always answerable. "User's plan = Free (was Pro, changed 2026-07-22)."<br>
+<strong>Procedural</strong> — how the agent should act. A learned or authored rule, versioned alongside the system prompt it shipped with, not retrieved by similarity at all — it's either active for the current prompt version or it isn't. "Refunds over $200 require a manager-approval tool call before <code>refund_order</code>."</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 480" role="img" aria-label="Flow: a turn arrives, the agent runtime retrieves episodic, semantic, and procedural memory filtered by tenant, injects each as a labeled prompt section, the model responds, new facts are extracted and written back with old semantic rows expired, and the frontend renders a memory badge.">
+  <defs>
+    <marker id="ta3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT</text>
+  <rect x="20" y="32" width="340" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="190" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">POST /agent/turn { user_id, message }</text><text x="190" y="66" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">user_id becomes the tenant filter for every query below</text>
+
+  <text x="20" y="112" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="120" width="340" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="190" y="140" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">retrieve_memory(user_id, query)</text><text x="190" y="153" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">3 parallel queries, one per memory type</text>
+  <path d="M190 76 L190 116" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <text x="20" y="202" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA (Postgres + pgvector)</text>
+  <rect x="20" y="210" width="220" height="44" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="130" y="230" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">episodic_events</text><text x="130" y="243" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">recency-weighted ANN</text>
+  <rect x="250" y="210" width="220" height="44" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="360" y="230" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">semantic_facts</text><text x="360" y="243" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">WHERE expired_at IS NULL</text>
+  <rect x="480" y="210" width="220" height="44" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="590" y="230" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">procedural_rules</text><text x="590" y="243" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">WHERE prompt_version = current</text>
+  <path d="M130 166 L130 206" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta3)"/>
+  <path d="M290 166 L360 206" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta3)"/>
+  <path d="M300 166 L590 206" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta3)"/>
+
+  <rect x="20" y="290" width="340" height="46" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/><text x="190" y="310" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">build labeled prompt sections, call model</text><text x="190" y="323" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">[EPISODIC] [SEMANTIC] [PROCEDURAL] stay separate</text>
+  <path d="M130 254 L130 300 L180 300" fill="none" stroke="var(--warn)" stroke-width="1.1" marker-end="url(#ta3)"/>
+  <path d="M360 254 L360 300 L200 300" fill="none" stroke="var(--warn)" stroke-width="1.1"/>
+  <path d="M590 254 L590 300 L200 300" fill="none" stroke="var(--warn)" stroke-width="1.1"/>
+
+  <rect x="20" y="368" width="340" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="190" y="388" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">extract facts, write back</text><text x="190" y="401" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">append episodic row; expire old semantic row, insert new</text>
+  <path d="M190 336 L190 364" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta3)"/>
+
+  <text x="420" y="330" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="420" y="338" width="280" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="560" y="358" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">memory badge: "Using: Free plan, email pref"</text><text x="560" y="371" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">expandable, with a "forget this" action</text>
+  <path d="M360 313 L560 313 L560 334" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta3)"/>
+</svg>
+<figcaption><b>FIG 3.1</b> — Three retrieval queries with three different shapes (recency-weighted ANN, current-row lookup, version-pinned lookup) feed one prompt with labeled sections. Writing back is asymmetric too: episodic always inserts, semantic expires-then-inserts, procedural only changes when a human ships a new prompt version.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["API: POST /agent/turn user_id, message"] --> B["agent runtime: retrieve_memory(user_id)"]
+  B --> C["episodic_events (recency ANN)"]
+  B --> D["semantic_facts WHERE expired_at IS NULL"]
+  B --> E["procedural_rules WHERE prompt_version = current"]
+  C --> F["build labeled prompt sections, call model"]
+  D --> F
+  E --> F
+  F --> G["extract facts, write back:<br/>append episodic; expire+insert semantic"]
+  G --> H["frontend: memory badge, expandable, 'forget this'"]</pre>
+</details>
+</figure>
+
+<h3>Layer 4 — data: three tables, three invariants (Postgres + pgvector)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">SQL — schema</button></div>
+  <div class="tab-panel">
+<pre><code>CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Episodic: append-only, never edited, never expired.
+CREATE TABLE episodic_events (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  content TEXT NOT NULL,
+  embedding vector(1536) NOT NULL
+);
+CREATE INDEX ON episodic_events USING hnsw (embedding vector_cosine_ops);
+
+-- Semantic: bitemporal. A "current" fact has expired_at IS NULL.
+-- Updating a fact NEVER does UPDATE ... SET value = — it closes the
+-- old row and inserts a new one, so "what did we believe on date X"
+-- stays answerable.
+CREATE TABLE semantic_facts (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  fact_key TEXT NOT NULL,             -- e.g. 'plan_tier', 'contact_pref'
+  fact_value TEXT NOT NULL,
+  embedding vector(1536) NOT NULL,
+  effective_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expired_at TIMESTAMPTZ
+);
+-- At most one CURRENT row per (user_id, fact_key):
+CREATE UNIQUE INDEX one_current_fact
+  ON semantic_facts (user_id, fact_key) WHERE expired_at IS NULL;
+
+-- Procedural: pinned to a system-prompt version, not retrieved by
+-- similarity — it's on for a version or it isn't.
+CREATE TABLE procedural_rules (
+  id BIGSERIAL PRIMARY KEY,
+  prompt_version TEXT NOT NULL,
+  rule_text TEXT NOT NULL,
+  source TEXT NOT NULL              -- 'authored' | 'promoted_from_trajectory'
+);
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — agent runtime: retrieval and the write-back that keeps semantic facts honest (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — retrieve + supersede</button></div>
+  <div class="tab-panel">
+<pre><code>async def retrieve_memory(db, user_id: str, query_embedding: list[float], prompt_version: str):
+    # Every query is scoped by user_id FIRST — see failure mode 1 for
+    # what happens the one time this filter gets dropped in a refactor.
+    episodic = await db.fetch(
+        """SELECT content, occurred_at FROM episodic_events
+           WHERE user_id = $1
+           ORDER BY embedding <=> $2, occurred_at DESC LIMIT 5""",
+        user_id, query_embedding,
+    )
+    semantic = await db.fetch(
+        """SELECT fact_key, fact_value FROM semantic_facts
+           WHERE user_id = $1 AND expired_at IS NULL""",   -- current only
+        user_id,
+    )
+    procedural = await db.fetch(
+        """SELECT rule_text FROM procedural_rules WHERE prompt_version = $1""",
+        prompt_version,   -- pinned to what's deployed NOW, not similarity-matched
+    )
+    return {"episodic": episodic, "semantic": semantic, "procedural": procedural}
+
+
+async def supersede_fact(db, user_id: str, fact_key: str, new_value: str, embedding: list[float]):
+    # Expire-then-insert inside one transaction, never a bare UPDATE —
+    # the unique index on (user_id, fact_key) WHERE expired_at IS NULL
+    # is what makes "exactly one current row" hold under concurrent writes.
+    async with db.transaction():
+        await db.execute(
+            """UPDATE semantic_facts SET expired_at = now()
+               WHERE user_id = $1 AND fact_key = $2 AND expired_at IS NULL""",
+            user_id, fact_key,
+        )
+        await db.execute(
+            """INSERT INTO semantic_facts (user_id, fact_key, fact_value, embedding)
+               VALUES ($1, $2, $3, $4)""",
+            user_id, fact_key, new_value, embedding,
+        )
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 1 &amp; 2 — frontend badge over an API endpoint (React + Express)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — memory badge + forget endpoint</button></div>
+  <div class="tab-panel">
+<pre><code>// API layer: exposes exactly what was injected into THIS turn's prompt,
+// so the frontend never has to re-derive it from the raw stores.
+app.get("/agent/turns/:turnId/memory", async (req, res) => {
+  const used = await getMemoryUsedForTurn(req.params.turnId); // logged at inject time
+  res.json({ semantic: used.semantic, episodic_count: used.episodic.length });
+});
+
+app.delete("/memory/semantic/:userId/:factKey", async (req, res) => {
+  await expireFact(req.params.userId, req.params.factKey); // same expire path as supersede_fact
+  res.status(204).end();
+});
+</code></pre>
+<pre><code>function MemoryBadge({ turnId }: { turnId: string }) {
+  const [mem, setMem] = useState<{ semantic: { fact_key: string; fact_value: string }[] } | null>(null);
+  useEffect(() => { fetch(`/agent/turns/${turnId}/memory`).then(r => r.json()).then(setMem); }, [turnId]);
+  if (!mem || mem.semantic.length === 0) return null;
+
+  return (
+    <details className="memory-badge">
+      <summary>Using memory: {mem.semantic.map(f => f.fact_value).join(", ")}</summary>
+      <ul>
+        {mem.semantic.map(f => (
+          <li key={f.fact_key}>
+            {f.fact_key}: {f.fact_value}
+            <button onClick={() => fetch(`/memory/semantic/${userId}/${f.fact_key}`, { method: "DELETE" })}>
+              Forget
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+</code></pre>
+  </div>
+</div>
+<p>The badge only renders what was actually retrieved for that specific turn — logged at inject time, not re-queried live — so what the user sees matches what the model saw, even if a fact changes a second later.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>The tenant filter gets dropped in a refactor.</strong> Symptom: a customer's agent session references another customer's order number or support history. The trace shows a <code>retrieve_memory</code> call whose SQL has no <code>WHERE user_id = $1</code> clause — usually because someone "simplified" the query into a shared helper that took an optional filter, and the optional filter quietly stopped being passed. This is a multi-tenant data leak, not a quirky hallucination, and it needs the same review bar as any other cross-tenant query in the codebase.</li>
+<li><strong>Semantic facts get overwritten instead of superseded.</strong> Symptom: the cold open — two "current" rows for the same <code>fact_key</code>, both retrieved, the model picking whichever scored higher on similarity that happened to be the stale one. Root cause is almost always a bare <code>UPDATE ... SET fact_value =</code> somewhere that bypasses the expire-then-insert path, which the unique partial index in §3 is specifically designed to make impossible if every write goes through <code>supersede_fact</code>.</li>
+<li><strong>Episodic retrieval degrades as history grows.</strong> Symptom: recall latency creeps up over months, and separately, the top-k results start surfacing events that are semantically similar but months stale — "user asked about refunds" from a year-old ticket outranking last week's near-identical question because nothing in a pure cosine-similarity query accounts for recency. Left unbounded, this is also a cost problem: every turn re-embeds and re-scans a growing table for events nobody will ever need again. Fix is a recency-weighted score (blend cosine distance with age) and an archival policy, not a bigger <code>LIMIT</code>.</li>
+<li><strong>Procedural memory outlives the policy it came from.</strong> Symptom: the agent enforces a manager-approval step for refunds that a system-prompt update two sprints ago replaced with an automated threshold check — support tickets show the agent blocking a refund the new policy says should go through automatically. The rule was never deleted or re-pinned to the new <code>prompt_version</code>, so it's still "on" for every session, silently contradicting the current system prompt because nobody versioned the two together.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — three-tier taxonomy vs. one memory table</div>
+<p>Reach for the full three-tier split — separate episodic, semantic, and procedural stores with their own write invariants — when your agent maintains a relationship with a user or account across sessions that lasts weeks or months, and where a stale or duplicated fact changes what the agent tells someone: support bots, account-management agents, personal assistants. The cost of getting "what's true right now" wrong is user-facing and compounding.</p>
+<p>Stay with a single undifferentiated memory table (or no persistent memory at all beyond the current session's rolling summary) when the agent's job is single-shot task automation with no cross-session relationship to maintain — a code-review bot, a one-off data-migration agent, anything where each run starts clean. Building bitemporal fact versioning for an agent that never needs to remember what was true last Tuesday is solving a problem you don't have.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> stand up the <code>semantic_facts</code> table from §3, prove that superseding a fact never leaves two "current" rows, and confirm the API layer serves only the live one.</p>
+<ol>
+<li>Run Postgres with pgvector locally: <code>docker run -d --name pg -e POSTGRES_PASSWORD=pw -p 5432:5432 pgvector/pgvector:pg16</code>, then apply the <code>semantic_facts</code> DDL (including the partial unique index) from §3.</li>
+<li>Insert a fact directly: <code>INSERT INTO semantic_facts (user_id, fact_key, fact_value, embedding) VALUES ('11111111-1111-1111-1111-111111111111', 'plan_tier', 'Pro', '[...]');</code> (any 1536-length zero-vector works for the lab).</li>
+<li>Try to insert a second "current" row for the same <code>user_id</code>/<code>fact_key</code> without expiring the first — confirm Postgres rejects it with a unique-constraint violation on <code>one_current_fact</code>.</li>
+<li>Call <code>supersede_fact</code> from §3 (or run its two SQL statements by hand inside a transaction) to change <code>plan_tier</code> to <code>Free</code>. Confirm <code>SELECT count(*) FROM semantic_facts WHERE user_id = '...' AND fact_key = 'plan_tier' AND expired_at IS NULL</code> returns exactly <b>1</b>.</li>
+<li>Wire up the two Express routes from §3, start the server, and hit <code>curl localhost:3000/agent/turns/&lt;turnId&gt;/memory</code> against a turn you've logged — confirm the JSON response contains only the current <code>Free</code> value, never the expired <code>Pro</code> row.</li>
+<li>Call <code>curl -X DELETE localhost:3000/memory/semantic/&lt;userId&gt;/plan_tier</code> and re-run the count query — confirm it now returns <b>0</b> current rows, proving "forget this" from the UI maps to the same expire path as a normal update.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ A second unexpired insert for the same <code>(user_id, fact_key)</code> is rejected by the database, not caught in application code.</li>
+<li>✅ After superseding, exactly one current row exists, and the memory endpoint returns only that value.</li>
+<li>✅ The DELETE ("forget") endpoint results in zero current rows for that key, observable via the same count query.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A teammate proposes collapsing all three memory types into one table — <code>memories(id, user_id, type, content, embedding, created_at)</code> — with a <code>type</code> enum instead of three tables. It's simpler to query and simpler to embed. What's wrong with it, and what would you push back with?</strong></p>
+<p><em>Strong answer sketch: the three types don't just differ in content, they differ in write invariant, and a shared schema forces a lowest-common-denominator shape that breaks at least one of them. Episodic rows are immutable and only ever appended — there's no correct notion of "expire this event." Semantic facts need "at most one current value per key," enforced by a partial unique index keyed on an <code>expired_at IS NULL</code> condition that has no meaning for episodic or procedural rows. Procedural rules aren't retrieved by similarity at all — they're pinned to a <code>prompt_version</code>, and a generic embedding-similarity query over a shared table has no way to express "only rows matching the currently deployed prompt," which is exactly the gap that produces failure mode 4. Collapsing the schema means either bolting all three invariants onto every row (episodic rows carrying an unused <code>expired_at</code> column, procedural rows carrying an embedding nobody queries), or — more likely — silently dropping the invariants that don't fit the common shape, which is how "current fact" and "stale fact" end up indistinguishable again. The right compromise, if a single table is a hard requirement for tooling reasons, is a shared physical table with type-specific CHECK constraints and type-specific partial indexes — not a shared invariant. But three tables unified only at the retrieval-orchestration layer, as in §3, is simpler to reason about and costs nothing at query time, since the agent runtime was always going to run three separate queries either way.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://arxiv.org/abs/2310.08560">Packer et al., "MemGPT: Towards LLMs as Operating Systems"</a> (the paged-memory architecture behind Letta; the episodic/semantic split this article builds on)</li>
+<li><a href="https://docs.mem0.ai/">mem0 — documentation</a> (a production memory layer implementing a similar fact-extraction and update pipeline, useful as a build-vs-buy comparison point)</li>
+<li><a href="https://github.com/pgvector/pgvector">pgvector — README and indexing docs</a> (HNSW index tuning referenced in the episodic table's index; relevant to failure mode 3's latency growth)</li>
+<li><a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Anthropic — Effective Context Engineering for AI Agents</a> (the broader context-engineering framing this taxonomy sits inside)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-26 · Stable: the episodic/semantic/procedural split itself is decades-old cognitive-science taxonomy applied to a new substrate and isn't going anywhere. Worth rechecking: mem0's and Letta's specific extraction pipelines and APIs move fast and may look different by the time you read this — treat the citations above as prior art, not as a spec to copy verbatim.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: a future Pillar 2 article on Redis-backed external context stores (the low-latency cache in front of the Postgres tables built here) and Pillar 5's data-freshness-vs-agent-memory piece, which picks up exactly where failure mode 2 leaves off. Pairs with <a href="tool-design-as-api-design.html">Tool Design as API Design</a> — the expire-then-insert pattern for semantic facts is the same "identity across writes" discipline as that article's idempotency keys, applied to state instead of side effects.</p>
+
+<nav class="pager">
+  <a href="mcp-anatomy-hosts-clients-servers-primitives.html">← PREV — MCP Anatomy</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
