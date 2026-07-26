@@ -24,11 +24,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: enabled
+
+      - name: Regenerate sitemap.xml
+        run: ./scripts/generate-sitemap.sh
 
       - name: Upload site
         uses: actions/upload-pages-artifact@v3

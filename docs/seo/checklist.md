@@ -1,7 +1,8 @@
 # SEO Checklist
 
-Last reviewed: 2026-07-22 (fixed a recurring missing-sitemap-entry
-regression and added a CI check to catch it going forward). The table
+Last reviewed: 2026-07-25 (sitemap staleness recurred a third time; the
+verify-only CI check itself was replaced with a generated sitemap — see
+maintenance note below). The table
 below reflects the **legacy pages** (`index.html`, `manual/*.html`, and
 all 8 already-published `articles/*.html` files) — none of which are
 covered by the Astro pilot yet. **Any new article authored through `site/`** (once
@@ -15,7 +16,7 @@ corresponding backlog items.
 | Unique `<title>` per page | ✅ Present | Every page reviewed has a distinct, descriptive `<title>`. |
 | Real `<meta name="description">` | ❌ Missing | Present only inside HTML authoring-comments on some pages (not emitted as an actual tag). |
 | Canonical URLs (`rel="canonical"`) | ❌ Missing | Not found on any page. |
-| Sitemap (`sitemap.xml`) | ✅ Present (2026-07-18) | Hand-maintained at repo root, lists all 17 published pages (verified 2026-07-22). Update it whenever a page is added/removed — see maintenance note below. As of 2026-07-22, `.github/workflows/check-sitemap.yml` fails CI if any published page is missing an entry. |
+| Sitemap (`sitemap.xml`) | ✅ Present (2026-07-18) | Generated from the published pages + their git history by `scripts/generate-sitemap.sh` as of 2026-07-25 — no longer hand-maintained. Lists all 18 published pages. `deploy-pages.yml` regenerates it fresh before every deploy, so the *live* sitemap can never be stale; `.github/workflows/check-sitemap.yml` fails CI if the committed copy drifts from the generator's output. |
 | `robots.txt` | ✅ Present (2026-07-18) | At repo root: allows all crawlers, disallows `/docs/` (internal engineering knowledge base, not blog content), points to the sitemap. |
 | Open Graph tags | ❌ Missing | Not found on any page. |
 | Twitter Card tags | ❌ Missing | Not found on any page. |
@@ -24,33 +25,37 @@ corresponding backlog items.
 | Clean, crawlable URLs | ✅ Present | Static `.html` files, human-readable slugs (e.g. `articles/streaming-agent-output-to-the-browser.html`). |
 | Semantic heading structure | ⚠️ Partial | Trends Board skips heading levels (h2→h4); see accessibility audit. |
 
-## Maintenance note: keeping `sitemap.xml` fresh
+## Maintenance note: `sitemap.xml` is now generated, not hand-maintained
 
-`sitemap.xml` is hand-maintained (no build step generates it — consistent
-with this repo's dependency-free design). Whenever a future run publishes
-a new article, module, or index page, it must add a matching `<url>`
-entry (with an accurate `<lastmod>`) to `sitemap.xml`, the same way
-`articles/LEDGER.md` is updated on every new article. This checklist and
-`docs/technical-debt/backlog.md` should flag it as stale if a run adds
-content without updating the sitemap.
+This was hand-maintained XML through 2026-07-22, with a verify-only CI
+check (`scripts/check-sitemap.sh` / `.github/workflows/check-sitemap.yml`)
+added that day to catch missing entries. **It went stale a third time
+anyway** — the 2026-07-25 run found the newest article
+(`articles/mcp-anatomy-hosts-clients-servers-primitives.html`) missing
+from the sitemap, and separately found an already-present entry
+(`context-compaction-for-long-running-agents.html`) carrying a wrong
+`<lastmod>` (one day off from its actual last commit) — the CI check only
+ever caught missing entries, not stale dates, so that second class of
+drift had gone completely undetected.
 
-**This happened twice:** the 2026-07-19 daily content run published
-`articles/no-framework-200-line-harness.html` without a matching
-`sitemap.xml` entry (caught and fixed same-day; a reminder step was then
-added to `SCHEDULED_TASK_PROMPT.md`'s "finish every run" checklist). It
-recurred on 2026-07-22 — `articles/tool-descriptions-are-prompts.html`
-shipped without a sitemap entry despite that reminder already being in
-place, proving a prose reminder alone doesn't reliably prevent this.
-
-**Durable fix (2026-07-22):** `scripts/check-sitemap.sh`, run by
-`.github/workflows/check-sitemap.yml` on every push and pull request,
-fails the "Check sitemap freshness" status check if any published legacy
-HTML page (repo root, `articles/`, `manual/`) has no matching
-`sitemap.xml` `<loc>` entry. This is a verify-only check — it doesn't
-change what ships and doesn't gate `deploy-pages.yml` — so a future
-content-authoring run that forgets the sitemap update will get a failing
-CI check instead of a silently-undiscoverable page. See
-`docs/technical-debt/backlog.md` items 2 and 10.
+Two prior fixes both relied on the sitemap staying hand-accurate: a
+prose reminder in `SCHEDULED_TASK_PROMPT.md` (recurred once), then a
+verify-only CI check (recurred again for a different reason). Both
+assumed a human or agent would remember to update the file correctly;
+neither removed the opportunity to forget. **2026-07-25 fix:**
+`scripts/generate-sitemap.sh` derives the entire file mechanically —
+every published legacy HTML page (repo root, `articles/`, `manual/`) plus
+its own `git log` last-commit date, with priority/changefreq assigned by
+path convention. `sitemap.xml` in the repo is now this script's
+committed output, `.github/workflows/check-sitemap.yml` fails CI if the
+committed file and the generator's output ever diverge, and
+`deploy-pages.yml` runs the generator itself immediately before
+uploading the Pages artifact — so even if a future content-authoring run
+forgets to regenerate the committed file, the *live, deployed* sitemap is
+always correct. This closes the gap structurally rather than relying on
+a fourth reminder: nothing publishable can reach the live site with a
+stale sitemap, and the check step never blocks a deploy (it only
+regenerates, it cannot fail). See `docs/technical-debt/backlog.md` item 2.
 
 ## Priority for fixes
 
