@@ -1,8 +1,7 @@
 # SEO Checklist
 
-Last reviewed: 2026-07-25 (sitemap staleness recurred a third time; the
-verify-only CI check itself was replaced with a generated sitemap — see
-maintenance note below). The table
+Last reviewed: 2026-07-26 (sitemap staleness recurred a fourth time and
+was root-caused — see maintenance note below). The table
 below reflects the **legacy pages** (`index.html`, `manual/*.html`, and
 all 8 already-published `articles/*.html` files) — none of which are
 covered by the Astro pilot yet. **Any new article authored through `site/`** (once
@@ -29,33 +28,28 @@ corresponding backlog items.
 
 This was hand-maintained XML through 2026-07-22, with a verify-only CI
 check (`scripts/check-sitemap.sh` / `.github/workflows/check-sitemap.yml`)
-added that day to catch missing entries. **It went stale a third time
-anyway** — the 2026-07-25 run found the newest article
-(`articles/mcp-anatomy-hosts-clients-servers-primitives.html`) missing
-from the sitemap, and separately found an already-present entry
-(`context-compaction-for-long-running-agents.html`) carrying a wrong
-`<lastmod>` (one day off from its actual last commit) — the CI check only
-ever caught missing entries, not stale dates, so that second class of
-drift had gone completely undetected.
+added that day to catch missing entries. That still let staleness recur
+a third time and missed a second drift class (stale `<lastmod>` dates)
+entirely, so on 2026-07-25 the file was replaced with
+`scripts/generate-sitemap.sh`, which derives every entry (URL, priority,
+changefreq, `<lastmod>` from each page's own `git log`) mechanically from
+the published pages on disk. `check-sitemap.sh` diffs the committed file
+against the generator's output, and `deploy-pages.yml` runs the generator
+itself immediately before uploading the Pages artifact — so the *live,
+deployed* sitemap can never be stale regardless of what's committed.
 
-Two prior fixes both relied on the sitemap staying hand-accurate: a
-prose reminder in `SCHEDULED_TASK_PROMPT.md` (recurred once), then a
-verify-only CI check (recurred again for a different reason). Both
-assumed a human or agent would remember to update the file correctly;
-neither removed the opportunity to forget. **2026-07-25 fix:**
-`scripts/generate-sitemap.sh` derives the entire file mechanically —
-every published legacy HTML page (repo root, `articles/`, `manual/`) plus
-its own `git log` last-commit date, with priority/changefreq assigned by
-path convention. `sitemap.xml` in the repo is now this script's
-committed output, `.github/workflows/check-sitemap.yml` fails CI if the
-committed file and the generator's output ever diverge, and
-`deploy-pages.yml` runs the generator itself immediately before
-uploading the Pages artifact — so even if a future content-authoring run
-forgets to regenerate the committed file, the *live, deployed* sitemap is
-always correct. This closes the gap structurally rather than relying on
-a fourth reminder: nothing publishable can reach the live site with a
-stale sitemap, and the check step never blocks a deploy (it only
-regenerates, it cannot fail). See `docs/technical-debt/backlog.md` item 2.
+**It still recurred a fourth time (2026-07-26):** `check-sitemap.yml` was
+found failing on `main` after PR #19 added
+`articles/memory-taxonomies-for-agents.html` without the committed
+`sitemap.xml` being regenerated. Root cause: `SCHEDULED_TASK_PROMPT.md` —
+the separate daily content-authoring agent's own operating spec — was
+never updated when the generator shipped; it still instructed that agent
+to hand-add a `<url>` entry itself. **Fixed 2026-07-26:** regenerated and
+committed `sitemap.xml`; rewrote `SCHEDULED_TASK_PROMPT.md` step 1a to
+call `./scripts/generate-sitemap.sh` instead of hand-editing. This is the
+first fix that corrects the instruction source rather than only the
+generated file or the CI tooling. See
+`docs/technical-debt/backlog.md` item 2 for full history.
 
 ## Priority for fixes
 

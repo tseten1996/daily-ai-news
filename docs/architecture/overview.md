@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-25 (sitemap staleness recurred a third time; replaced the hand-maintained `sitemap.xml` with a generator wired into deploy — see backlog #2)
+Last reviewed: 2026-07-26 (sitemap staleness recurred a fourth time and was root-caused to a stale instruction file, `SCHEDULED_TASK_PROMPT.md` — see backlog #2)
 
 ## What this repository is
 

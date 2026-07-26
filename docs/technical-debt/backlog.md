@@ -34,10 +34,10 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    run picking up slice (a) should check whether #11 has merged first and
    scope to `index.html` + `manual/*.html` if so, to avoid duplicating
    in-flight work.
-2. **DONE (2026-07-18); hardened 2026-07-22; root-caused 2026-07-25** —
-   `robots.txt` and `sitemap.xml` at the repo root. **Went stale three
-   times.** 2026-07-19: a new article shipped without a sitemap entry
-   (fixed same-day; added a prose reminder to
+2. **DONE (2026-07-18); hardened 2026-07-22; regenerated 2026-07-25;
+   root-caused 2026-07-26** — `robots.txt` and `sitemap.xml` at the repo
+   root. **Went stale four times.** 2026-07-19: a new article shipped
+   without a sitemap entry (fixed same-day; added a prose reminder to
    `SCHEDULED_TASK_PROMPT.md`). 2026-07-22: recurred anyway
    (`articles/tool-descriptions-are-prompts.html` missing) — added
    `scripts/check-sitemap.sh` + `.github/workflows/check-sitemap.yml`, a
@@ -48,18 +48,34 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    found a **second, previously-undetected class of drift**: an existing
    entry (`context-compaction-for-long-running-agents.html`) carried a
    `<lastmod>` one day off from its real last commit — the missing-entry
-   check never covered stale dates at all. **Fix applied 2026-07-25:**
-   replaced the hand-maintained file with `scripts/generate-sitemap.sh`,
-   which derives every entry (URL, priority, changefreq, and `<lastmod>`
-   from each page's own `git log`) mechanically from the published pages
-   on disk. `check-sitemap.sh` now diffs the committed file against the
-   generator's output (catches staleness of any kind, not just missing
-   URLs) and `deploy-pages.yml` runs the generator itself right before
-   uploading the Pages artifact — so the *live* sitemap is always correct
-   even if a future commit forgets to regenerate the checked-in copy, and
-   the generator step cannot fail the deploy (it only ever regenerates,
-   never errors on drift). This removes the human-memory dependency
-   entirely rather than adding a fourth reminder.
+   check never covered stale dates at all. Fixed by replacing the
+   hand-maintained file with `scripts/generate-sitemap.sh`, which derives
+   every entry (URL, priority, changefreq, and `<lastmod>` from each
+   page's own `git log`) mechanically from the published pages on disk;
+   `check-sitemap.sh` diffs the committed file against the generator's
+   output and `deploy-pages.yml` runs the generator itself right before
+   uploading the Pages artifact, so the *live* sitemap is always correct
+   regardless of what's committed. **Recurred a *fourth* time
+   (2026-07-26):** `check-sitemap.yml` was found failing on `main` at
+   commit `616b950` (PR #19, which added
+   `articles/memory-taxonomies-for-agents.html`) — the committed
+   `sitemap.xml` was never regenerated when that PR landed. Root cause:
+   the generator/CI-diff fix shipped 2026-07-25 changed *how the
+   committed file should be produced*, but never updated
+   `SCHEDULED_TASK_PROMPT.md` — the separate daily content-authoring
+   agent's own operating spec — which still told that agent (step "Finish
+   every run" 1a) to hand-add a `<url>` entry itself. The content agent
+   was correctly following its own instructions; those instructions were
+   simply never updated to match the tooling change. **Fix applied
+   2026-07-26:** (a) ran `scripts/generate-sitemap.sh` and committed the
+   now-current `sitemap.xml`, restoring a green `check-sitemap.yml` on
+   `main`; (b) rewrote `SCHEDULED_TASK_PROMPT.md` step 1a to tell the
+   content-authoring run to execute `./scripts/generate-sitemap.sh` and
+   commit its output, explicitly stating the file is generated and must
+   never be hand-edited. This is the first fix in this file's four-round
+   history to correct the actual instruction source that produced every
+   recurrence, rather than only the generated artifact or the CI
+   tooling around it.
 3. **OPEN — No RSS/Atom feed.** Domain standards call for an RSS feed for
    a blog platform; none exists. Would need a decision on whether it's
    hand-maintained XML (consistent with the no-build-step philosophy) or

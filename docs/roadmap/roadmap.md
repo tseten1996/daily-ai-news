@@ -1,14 +1,15 @@
 # Roadmap
 
-Last reviewed: 2026-07-25. The 2026-07-22 CI check (verify-only,
-missing-entries-only) still let sitemap staleness recur a third time and
-missed a second class of drift (stale `<lastmod>` dates) entirely.
-Replaced the hand-maintained `sitemap.xml` with a generator
-(`scripts/generate-sitemap.sh`) wired into `deploy-pages.yml`, so the
-live sitemap can no longer go stale regardless of what's committed
-(backlog #2). The Immediate items below are otherwise unchanged from the
-2026-07-22 review, with one addition: PR #11 (open since 2026-07-20)
-already covers the `articles/*.html` slice of the SEO-meta-tags item.
+Last reviewed: 2026-07-26. Sitemap staleness recurred a *fourth* time
+(`check-sitemap.yml` was red on `main` after PR #19) because
+`SCHEDULED_TASK_PROMPT.md` was never updated to match the 2026-07-25
+generator fix — it still told the daily content-authoring agent to
+hand-edit `sitemap.xml`. Fixed both the artifact (regenerated
+`sitemap.xml`) and the instruction source (`SCHEDULED_TASK_PROMPT.md`
+step 1a now calls the generator). See backlog #2. The Immediate items
+below are otherwise unchanged from the 2026-07-22 review; PR #11 (open
+since 2026-07-20, still unmerged as of this review) already covers the
+`articles/*.html` slice of the SEO-meta-tags item.
 
 ## Immediate (next 1-3 runs)
 
