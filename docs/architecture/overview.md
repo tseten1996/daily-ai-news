@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-25 (sitemap staleness recurred a third time; replaced the hand-maintained `sitemap.xml` with a generator wired into deploy — see backlog #2)
+Last reviewed: 2026-07-27 (added real SEO meta tags to `index.html` and `manual/*.html`; article/module counts corrected — see backlog #1, #14)
 
 ## What this repository is
 
@@ -108,7 +108,7 @@ docs/                    This knowledge base (architecture-review agent's memory
 ### 3. Articles — legacy (`articles/`) and pilot (`site/`)
 - A "pillar"-organized full-stack agentic engineering article stream,
   tracked via `articles/LEDGER.md` for dedup by topic/concept rather than
-  exact title match. As of this review: 8 articles published, all as
+  exact title match. As of this review: 14 articles published, all as
   legacy hand-authored HTML.
 - **The Astro pilot (`site/`, ADR-0001) exists but new articles are still
   being authored in the legacy format** — the pilot was never wired into

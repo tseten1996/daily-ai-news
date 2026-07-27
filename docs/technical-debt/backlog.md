@@ -10,9 +10,9 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
 ## Priority 5 — SEO
 
-1. **PARTIALLY ADDRESSED (2026-07-17) for new content only** — No SEO
-   metadata anywhere in the *legacy* site. Audited all HTML files
-   (`index.html`, `articles/*.html`, `manual/*.html`): zero real
+1. **PARTIALLY ADDRESSED — `index.html` + `manual/*.html` DONE
+   (2026-07-27); `articles/*.html` still OPEN.** No SEO metadata anywhere
+   in the *legacy* site as of the 2026-07-17 bootstrap audit: zero real
    `<meta name="description">` tags, zero Open Graph tags, zero Twitter
    Card tags, zero `rel="canonical"` links, zero JSON-LD structured data.
    Some pages carry a "meta description" value only inside an HTML
@@ -22,18 +22,17 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    social sharing, Article/BlogPosting JSON-LD). **Fixed architecturally
    for the Astro pilot** (`site/` — see ADR-0001): its shared
    `BaseLayout` emits real meta description, canonical, OG, Twitter, and
-   JSON-LD tags automatically for every page built through it. **Still
-   open** for `index.html`, `manual/*.html`, and all 7 already-published
-   `articles/*.html` pages, none of which are covered by the Astro pilot
-   yet. High value, low risk — likely needs splitting: (a) add real
-   `<meta description>` + canonical + OG/Twitter tags per page first
-   (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
-   article/module page as a follow-up slice. **Note (2026-07-25):** PR #11
-   ("Add real SEO meta tags to Articles pages", open since 2026-07-20,
-   targets `main`) already proposes this for `articles/*.html`. A future
-   run picking up slice (a) should check whether #11 has merged first and
-   scope to `index.html` + `manual/*.html` if so, to avoid duplicating
-   in-flight work.
+   JSON-LD tags automatically for every page built through it.
+   **Fixed 2026-07-27** for `index.html` (recovered from the stranded PR
+   #17 commit, `191069d` — see item 14) and all 7 `manual/*.html` files
+   (net-new: meta description, canonical, OG, Twitter, and JSON-LD
+   `BlogPosting`/`WebSite` schema on all 8 files, verified with a JSON-LD
+   parse check and a headless Playwright pass — 200 status, tags present,
+   no new console errors). **Still open** for all 14 already-published
+   `articles/*.html` pages — deliberately **not** touched this run
+   because two different open PRs (#11 and the stranded #17) already
+   propose conflicting/overlapping slices of this exact work; see item 14
+   for why untangling those has to happen before a third attempt is safe.
 2. **DONE (2026-07-18); hardened 2026-07-22; root-caused 2026-07-25** —
    `robots.txt` and `sitemap.xml` at the repo root. **Went stale three
    times.** 2026-07-19: a new article shipped without a sitemap entry
@@ -191,6 +190,41 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
     the fate of the 7 published legacy articles is still undecided
     (item 9) — reconciling the history didn't answer either question, it
     just made them visible and actionable again.
+
+## Priority 7 — Architecture health (process)
+
+14. **OPEN — The "PR merged into a stale non-default branch instead of
+    `main`" bug has recurred a second time, independently of item 13's
+    fix.** Item 13 (RESOLVED 2026-07-21) diagnosed and reconciled this
+    exact failure mode for the Astro pilot (PR #6, base=
+    `claude/daily-ai-trends-tutorial-txft7z`). Three days *after* that fix
+    landed, PR #17 (2026-07-24, "Add real SEO meta tags to index.html and
+    the Articles stream") was opened and merged with the same wrong base
+    branch — confirmed via `mcp__github__pull_request_read`
+    (`base.ref = "claude/daily-ai-trends-tutorial-txft7z"`), not `main`.
+    Its `index.html` content was recovered by this run (item 1), but its
+    `articles/*.html` content was not (the article set has grown from 4
+    to 14 pages since, and a second open PR, #11, base=`main`, targets an
+    overlapping-but-different slice of the same files — reapplying either
+    stale diff today risks silently dropping the 10 newer articles or
+    producing duplicate meta tags once a human eventually merges the
+    other one). Item 13's fix (reconcile-after-the-fact) treated this as
+    a one-off; it is not. **Root cause still undiagnosed:** something
+    about how this branch's designated base gets chosen (likely a stale
+    default-branch reference cached from before `main` existed, or a PR
+    template/script that hardcodes the old branch name) keeps producing
+    this exact mistake across unrelated runs and unrelated task types
+    (architecture migration, then SEO tags). A future run with room to
+    investigate should grep the repo and any PR-creation tooling/templates
+    for hardcoded references to `claude/daily-ai-trends-tutorial-txft7z`
+    rather than continuing to reconcile symptoms one PR at a time. Until
+    then, **every run must verify its own designated branch and any
+    open PRs it plans to build on target `main` specifically** (this run
+    did, via `mcp__github__pull_request_read`) rather than trusting a
+    PR's "merged" status. Also blocks a clean resolution of item 1's
+    remaining `articles/*.html` slice: PR #11 and the stranded PR #17
+    need a human decision (close one, rebase, or manually reconcile)
+    before that work can proceed without a third collision.
 
 ## Notes / non-issues found during audit
 
