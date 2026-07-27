@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Writing an RFC That Gets Funded: Structure, Stakeholder Mapping, and the Pre-Read Strategy · The Daily AI News</title>
+<meta name="description" content="Most RFCs die not because the design was wrong but because the document was built as a technical spec instead of a funding instrument — the stakeholder map, pre-read sequence, and RFC skeleton that fix it, worked through a shared agent-harness platform proposal.">
+<link rel="canonical" href="https://tseten1996.github.io/daily-ai-news/articles/writing-an-rfc-that-gets-funded.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Writing an RFC That Gets Funded: Structure, Stakeholder Mapping, and the Pre-Read Strategy">
+<meta property="og:description" content="Most RFCs die not because the design was wrong but because the document was built as a technical spec instead of a funding instrument — the stakeholder map, pre-read sequence, and RFC skeleton that fix it.">
+<meta property="og:url" content="https://tseten1996.github.io/daily-ai-news/articles/writing-an-rfc-that-gets-funded.html">
+<meta property="og:site_name" content="The Daily AI News">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Writing an RFC That Gets Funded: Structure, Stakeholder Mapping, and the Pre-Read Strategy">
+<meta name="twitter:description" content="The stakeholder map, pre-read sequence, and RFC skeleton that turn a technical spec into a funding instrument — worked through a shared agent-harness platform proposal.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Writing an RFC That Gets Funded: Structure, Stakeholder Mapping, and the Pre-Read Strategy",
+  "description": "Most RFCs die not because the design was wrong but because the document was built as a technical spec instead of a funding instrument — the stakeholder map, pre-read sequence, and RFC skeleton that fix it, worked through a shared agent-harness platform proposal.",
+  "datePublished": "2026-07-27",
+  "url": "https://tseten1996.github.io/daily-ai-news/articles/writing-an-rfc-that-gets-funded.html",
+  "author": { "@type": "Organization", "name": "The Daily AI News" },
+  "publisher": { "@type": "Organization", "name": "The Daily AI News" }
+}
+</script>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Writing an RFC That Gets Funded: Structure, Stakeholder Mapping, and the Pre-Read Strategy
+  slug: writing-an-rfc-that-gets-funded
+  pillar: Pillar 10 — Principal-Track Leverage
+  difficulty: Principal
+  series: none (standalone; builds on The No-Framework Option and Hooks as Deterministic Guardrails, whose mechanisms supply the worked RFC's technical substance; sets up future Pillar 10 articles on ADRs-vs-RFCs-vs-strategy-docs and the multiplier portfolio)
+  tags: rfc-process, stakeholder-mapping, technical-writing, org-influence, principal-engineering, agentic-platform
+  meta description: Most RFCs die not because the design was wrong but because the document was built as a technical spec instead of a funding instrument — the stakeholder map, pre-read sequence, and RFC skeleton that fix it, worked through a shared agent-harness platform proposal.
+  read time: ~11 min (~2,050 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  table.stakemap { border-collapse: collapse; width: 100%; font-size: .86rem; margin: 1rem 0; }
+  table.stakemap th, table.stakemap td { border: 1px solid var(--border); padding: .5rem .6rem; text-align: left; vertical-align: top; }
+  table.stakemap th { background: var(--panel); font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · PRINCIPAL-TRACK LEVERAGE</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 10 · Principal-Track Leverage</div>
+  <h1>Writing an RFC That Gets Funded: Structure, Stakeholder Mapping, and the Pre-Read Strategy</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Two engineers can write the same proposal — same architecture, same trade-offs, same code sketch — and one gets funded in a week while the other rots in review for a quarter. The difference is almost never the technical content. It's whether the document was built to survive the organization it has to pass through, or just to be technically correct.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-27</b></span>
+    <span>DIFFICULTY <b>Principal</b></span>
+    <span>READ <b>~11 min (~2,050 words)</b></span>
+    <span>LAB <b>build a stakeholder map and RFC skeleton for a real cross-team decision</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>Your RFC for a shared agent-harness platform has been open for eleven days. It has forty-one comments — six about heading levels, four arguing whether the noun should be "harness" or "runtime," one from the VP of Infra asking what this costs in Q3 that nobody has answered yet. In the decision meeting, twenty minutes go to re-litigating naming before someone says "let's take this offline," and the doc quietly stops getting comments. Three months later a different team ships a competing internal tool, because nobody outside the original thread could tell whether your RFC had been approved, rejected, or simply abandoned.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>Before written design review was standard practice, cross-team technical decisions got made in whichever meeting happened to have the right people in the room, decided by whoever was most senior or loudest, with no artifact and no recorded rationale — so the same argument replayed itself six months later when the next person hit the same fork. Written RFCs and design docs, formalized at places like IETF and later adopted broadly across the industry (Google's design-doc culture, Rust's RFC process), fixed the asynchronous-review and rationale-trail problem: put the reasoning in a document, let people comment without needing to share a room, keep the artifact as precedent.</p>
+<p>What that formalization didn't fix is the funding problem, because most engineers write an RFC as a technical spec — architecture, trade-offs, a code sketch — when what a cross-team decision actually needs is a funding instrument: a document that names the specific ask, tells every person with veto power what changes for them, and gets their objections folded in before the objections become public. A technically flawless RFC that never states "here is the yes/no decision I need from you, and here is what it costs" reads to a budget owner as a design document, not a request, and design documents don't get approved — they get discussed indefinitely. That's the gap this article closes: not how to design better systems, but how to structure and sequence the document and the conversations around it so a good design actually clears the org.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>A fundable RFC is a sequencing problem before it's a writing problem. The order in which a stakeholder learns about a proposal determines whether their objection becomes a one-line diff or a public veto — the document and the conversations around it have to be built in that order, not the reverse.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 640" role="img" aria-label="Flow: draft the one-pager, build a stakeholder map with approve/veto/inform tiers, run serial pre-reads with veto-holders most likely to object first, revise the draft to fold in real objections, open wide async review with an explicit close date, hold a decision meeting that only ratifies what pre-reads already surfaced, and record the outcome in a decision log.">
+  <defs>
+    <marker id="ta4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <rect x="20" y="20" width="400" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="220" y="40" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">1. DRAFT — problem, decision requested, cost &amp; ask</text><text x="220" y="53" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">written before anyone outside the author sees it</text>
+
+  <rect x="20" y="90" width="400" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="220" y="110" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">2. STAKEHOLDER MAP — approve / veto / inform tiers</text><text x="220" y="123" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">order veto-holders by likelihood of objecting</text>
+  <path d="M220 66 L220 86" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <text x="20" y="168" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">3. PRE-READS — serial, highest-likely-objection first</text>
+  <rect x="20" y="176" width="230" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="135" y="196" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Security lead (veto)</text><text x="135" y="209" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">1:1, 15 min</text>
+  <rect x="270" y="176" width="230" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="385" y="196" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">SRE lead (veto)</text><text x="385" y="209" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">1:1, after security</text>
+  <rect x="520" y="176" width="230" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="635" y="196" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">Budget owner (approve)</text><text x="635" y="209" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">sees a revised draft, not v1</text>
+  <path d="M100 136 L135 172" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+  <path d="M220 136 L385 172" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+  <path d="M300 136 L635 172" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+
+  <rect x="20" y="256" width="400" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="220" y="276" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">4. REVISE — fold real objections in before it's public</text><text x="220" y="289" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">the doc's content changes, not just its audience</text>
+  <path d="M135 222 L220 252" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+  <path d="M385 222 L260 252" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+  <path d="M635 222 L340 252" fill="none" stroke="var(--accent)" stroke-width="1.1" marker-end="url(#ta4)"/>
+
+  <rect x="20" y="326" width="400" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="220" y="346" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">5. WIDE REVIEW — async comments, explicit close date</text><text x="220" y="359" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">no veto-holder is seeing this proposal for the first time</text>
+  <path d="M220 302 L220 322" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <rect x="20" y="396" width="400" height="46" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/><text x="220" y="416" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">6. DECISION MEETING — ratifies, doesn't discover</text><text x="220" y="429" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">agenda item is the stated Decision Requested, nothing else</text>
+  <path d="M220 372 L220 392" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <rect x="20" y="466" width="400" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="220" y="486" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">7. DECISION LOG — Accepted / Rejected + rationale</text><text x="220" y="499" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">becomes searchable precedent, same role as an ADR</text>
+  <path d="M220 442 L220 462" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <text x="480" y="360" class="svg-label" font-size="9" fill="var(--warn)" font-weight="700">Skip step 3 and steps 5–6 merge into one</text>
+  <text x="480" y="374" class="svg-label" font-size="9" fill="var(--warn)">meeting where a veto-holder objects live —</text>
+  <text x="480" y="388" class="svg-label" font-size="9" fill="var(--warn)">see failure mode 1.</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — Steps 1–4 happen before anyone outside the author and the pre-read list sees the proposal. By the time step 5 opens, every veto-holder has already had their objection addressed or explicitly overridden with a documented reason — wide review is a broadcast, not a discovery process.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["1. Draft: problem, decision requested, cost & ask"] --> B["2. Stakeholder map: approve/veto/inform"]
+  B --> C1["3a. Pre-read: Security lead (veto)"]
+  B --> C2["3b. Pre-read: SRE lead (veto)"]
+  B --> C3["3c. Pre-read: Budget owner (approve)"]
+  C1 --> D["4. Revise: fold objections into the draft"]
+  C2 --> D
+  C3 --> D
+  D --> E["5. Wide review: async, explicit close date"]
+  E --> F["6. Decision meeting: ratifies, doesn't discover"]
+  F --> G["7. Decision log: Accepted/Rejected + rationale"]</pre>
+</details>
+</figure>
+
+<h3>Artifact 1 — the stakeholder map</h3>
+<p>Build this before writing prose. It forces two decisions the draft otherwise dodges: who actually has veto power (not "everyone who might be affected" — the person who can kill this in one sentence), and what order to talk to them in. Order by likelihood of objecting, most likely first — a pre-read that goes smoothly costs fifteen minutes; one that surfaces a real blocker needs to happen early enough that there's still time to redesign around it.</p>
+<table class="stakemap">
+<tr><th>Stakeholder</th><th>Power</th><th>Primary concern</th><th>Pre-read status</th><th>Position after pre-read</th></tr>
+<tr><td>Security lead (E. Ruiz)</td><td>veto</td><td>agent tool calls need an audit trail before they touch prod credentials</td><td>done — day 1</td><td>support, conditional on the hook-based audit log in §Proposal</td></tr>
+<tr><td>SRE lead (T. Okonkwo)</td><td>veto</td><td>on-call doesn't want a fourth bespoke checkpoint format to debug at 3am</td><td>done — day 1</td><td>support, after we standardized on the existing checkpoint schema</td></tr>
+<tr><td>Budget owner (VP Infra)</td><td>approve</td><td>Q3 headcount and infra cost, in a number, not a range</td><td>done — day 2</td><td>neutral, wants the number in the doc before wide review</td></tr>
+<tr><td>Platform team (dependent)</td><td>inform</td><td>timeline — do they need to migrate before or after their own Q3 launch</td><td>scheduled — day 3</td><td>pending</td></tr>
+<tr><td>Rest of eng org</td><td>inform</td><td>none specific — general awareness</td><td>wide review only</td><td>n/a</td></tr>
+</table>
+
+<h3>Artifact 2 — the RFC skeleton</h3>
+<p>The two fields most technical RFCs omit — <code>Decision Requested</code> and <code>Cost &amp; Ask</code> — are exactly the two a budget owner or VP reads for before deciding whether the rest is worth their time. Everything else below is a fairly standard design-doc shape; this is the same worked proposal, a shared agent-harness platform, whose actual technical mechanisms — the loop, tool registry, and checkpoint table — are covered at mechanism level in <a href="no-framework-200-line-harness.html">The No-Framework Option</a>, and whose policy layer is <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a>. This RFC doesn't re-explain either; it cites them and spends its own words on the decision.</p>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Markdown — rfc-skeleton.md</button></div>
+  <div class="tab-panel">
+<pre><code># RFC-014: Shared Agent Harness Platform
+
+Status: In review (pre-reads complete, wide review closes 2026-08-03)
+Owner: [you], Platform Eng
+Decision Requested: Approve funding for 1.5 FTE for two quarters to build
+  and support a shared agent harness (loop + tool registry + checkpoint
+  table + hook chokepoint) as an internal platform, replacing four
+  team-specific bespoke harnesses.
+
+## Context
+Four teams have independently built agent loops in the last two quarters.
+[link to inventory doc]. Each reimplements checkpointing, tool dispatch,
+and policy hooks with different bugs and different audit-log formats.
+
+## Problem
+Duplicated harness code means duplicated bugs (two of four have already
+shipped a checkpoint-replay double-execution bug) and no shared audit
+trail for security review.
+
+## Non-Goals
+Not proposing a shared *agent* — each team keeps its own tools and
+prompts. Only the harness (loop, checkpointing, hooks) is shared.
+
+## Proposal
+[Architecture summary — 1-2 paragraphs, cites existing published
+mechanism docs rather than re-deriving them]
+
+## Alternatives Considered
+1. Each team keeps its own harness — status quo, rejected: duplicated
+   bug surface, no shared audit trail (see Security pre-read below).
+2. Adopt an off-the-shelf framework — rejected: evaluated against our
+   abstraction-tax bar, see [link], costs more than it saves for our
+   4-team scale.
+
+## Cost & Ask
+1.5 FTE for two quarters. No new infra spend — runs on existing
+checkpoint-store Postgres cluster. Opportunity cost: delays [specific
+other project] by one sprint for the owning team.
+
+## Risks & Rollback
+Migration is opt-in per team for the first quarter; a team can stay on
+its bespoke harness with no forced cutover date. Rollback = don't adopt;
+no data migration is one-way.
+
+## Stakeholder Sign-off
+| Stakeholder      | Power   | Status                          |
+|-------------------|---------|----------------------------------|
+| Security (Ruiz)   | veto    | Support (conditional, met)      |
+| SRE (Okonkwo)      | veto    | Support                          |
+| VP Infra           | approve | Pending — number added, awaiting decision meeting |
+
+## Decision Log
+[filled in after the decision meeting — outcome + one-paragraph rationale,
+same role as an ADR: the searchable record of why, not just what]
+</code></pre>
+  </div>
+</div>
+<p>Notice what the skeleton refuses to let the author skip: a decision with a real deadline, a cost with a real number, and a sign-off table that makes "who has and hasn't been pre-read" visible to anyone opening the doc cold — including the VP who, in the cold open, asked a cost question nobody could answer in under two minutes.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see when this goes wrong</div>
+<ol>
+<li><strong>Wide review opens before pre-reads.</strong> Symptom: the comment thread fills with naming and formatting nitpicks in the first 48 hours — nobody's engaged with the actual proposal yet, because the people who'd have a substantive reaction (the veto-holders) haven't been asked to look closely, and everyone else defaults to surface-level feedback. When a real objection does show up, it's now public, and the veto-holder has to defend a position in front of an audience instead of just raising a concern — which turns a design conversation into a face-off.</li>
+<li><strong>No explicit Decision Requested.</strong> Symptom: the decision meeting ends with "let's take this offline" or "sounds good, keep iterating," nobody schedules a follow-up, and the doc quietly stops receiving comments within a week. Months later it's still open, technically neither approved nor rejected, and a competing proposal ships instead — the outcome in the cold open.</li>
+<li><strong>Missing or vague Cost &amp; Ask.</strong> Symptom: a stakeholder with budget authority asks a specific cost question live in the meeting, the room has no answer, and the meeting adjourns without a decision because the doc never pre-answered the one question that determines approval. This is the single most common reason a technically sound RFC dies in its first decision meeting.</li>
+<li><strong>Stakeholder map skipped or stale.</strong> Symptom: someone with veto power — often security, SRE, or a dependent team not in the original author's usual orbit — learns about the RFC only after a decision meeting they weren't invited to, and reopens the whole decision weeks later. The re-litigation costs more calendar time than a fifteen-minute pre-read would have, and it reads as the team having tried to route around them, which costs trust on top of time.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — full RFC with pre-reads vs. a lightweight ADR</div>
+<p>Reach for the full process — stakeholder map, serial pre-reads, an explicit decision meeting — when the decision spans team boundaries, spends real budget or headcount, or is expensive to reverse once other teams have built on top of it: a shared agent-harness platform, an org-wide model-routing policy, a security-posture change. The coordination cost is real, but it's smaller than the cost of a public veto or a decision that silently rots.</p>
+<p>Stay with a lightweight ADR — or just build it and document the decision after the fact — when the choice is reversible, scoped to your own team's code, and doesn't require anyone else's roadmap to bend. Refactoring your own service's internal harness doesn't need a stakeholder tour; it needs a paragraph in <code>docs/decisions/</code> explaining what you chose and why, written for the next person who wonders. Running the full RFC machinery on a decision nobody outside your team needs to approve is its own failure mode — it just looks like diligence instead of waste.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> produce a stakeholder map and a filled RFC skeleton for a real (or realistic) cross-team decision at your org, ready to send as an actual pre-read.</p>
+<ol>
+<li>Pick a real technical decision that crosses at least two teams — an existing draft you're sitting on works well, or something like "should we adopt a shared agent harness" if nothing real comes to mind.</li>
+<li>Copy the stakeholder-map table from §3. List 4–6 real people or roles, and mark each one's power tier: <code>approve</code>, <code>veto</code>, or <code>inform</code>. Leave nothing blank — an unclear power tier is exactly what lets a veto-holder go undiscovered until the decision meeting.</li>
+<li>For each <code>veto</code> row, write their single most likely objection in one sentence, based on what you already know about their priorities — not a guess dressed up as certainty, an actual best guess.</li>
+<li>Order the veto rows by likelihood of objecting, most likely first, and draft (don't send) a two-sentence pre-read message to the top one: what you're proposing, and the specific question you want their reaction to.</li>
+<li>Copy the RFC skeleton from §3 and fill in <code>Decision Requested</code> and <code>Cost &amp; Ask</code> with real numbers or dates for your proposal — not "TBD," an actual FTE count, dollar figure, or deadline.</li>
+<li>Hand the filled skeleton to one colleague and ask them to find one hole in five minutes. Revise the doc to address what they find before you'd consider it ready for wide review.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ every row in the stakeholder map has an explicit power tier, none left blank</li>
+<li>✅ <code>Decision Requested</code> states a specific yes/no ask a stranger could act on, not "thoughts appreciated"</li>
+<li>✅ <code>Cost &amp; Ask</code> contains a real number (FTE, dollars, or a date), not a placeholder</li>
+<li>✅ at least one real objection, surfaced by the five-minute review, is now addressed in the doc</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A peer argues that pre-reads are political manipulation — the RFC should stand on its own merits in a single, symmetric, open review, and privately briefing selected stakeholders undermines that. How do you respond?</strong></p>
+<p><em>Strong answer sketch: the key distinction is between shaping a document before publication and campaigning for a predetermined outcome — and pre-reads are only the former if the doc's actual content changes based on what's raised. If a security lead's objection in a pre-read is valid, the proposal changes for every reader, not just for them privately; nothing about the public version is different from what it would have been had the same objection surfaced in the open thread. What changes is the cost of surfacing it. An objection raised one-on-one, before the doc is public, costs one conversation and a diff. The identical objection raised for the first time in a twelve-person decision meeting costs a derailed meeting, a stakeholder now defending a public position instead of just flagging a concern, and usually a second meeting to actually resolve it — that's the mechanism behind failure mode 1, not a hypothetical. The "symmetric open review" alternative isn't actually symmetric either: in practice, whoever comments first or loudest shapes the thread, and a veto-holder who was too busy to read a forty-comment thread carefully and raises their objection live in the meeting isn't playing more fairly than one who was pre-read — they're just paying the cost at the most expensive possible point, and making everyone else pay it with them. Pre-reads redistribute the cost of surfacing objections to the cheapest point at which they can still change the design. That's not manipulation; it's the same reason you'd rather catch a bug in code review than in production.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://www.industrialempathy.com/posts/design-docs-at-google/">Malte Ubl, "Design Docs at Google"</a> (the design-doc genre this RFC skeleton descends from, including the review-and-approval mechanics)</li>
+<li><a href="https://workingbackwards.com/resources/working-backwards-pr-faq/">Working Backwards — the Amazon PR/FAQ template and guide</a> (a different but related funding-instrument pattern: a mock press release forces the same "what's the ask, in plain terms" discipline this article argues for)</li>
+<li><a href="https://github.com/rust-lang/rfcs">The Rust RFC process</a> (a fully public, real-world example of staged review — draft, discussion period, final comment period — that mirrors the pre-read/wide-review split at open-source scale)</li>
+<li><a href="https://www.rfc-editor.org/rfc/rfc2026">IETF RFC 2026 — The Internet Standards Process</a> (the origin of the term "RFC," worth reading once for how much of the modern process — explicit stages, explicit sign-off — traces back to it)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-27 · Stable: the underlying sequencing argument (map stakeholders, pre-read before wide review, name the decision explicitly) doesn't depend on any specific company's process and isn't going to age the way a framework version would. Worth adapting: the specific artifact templates in §3 to whatever review tooling and org norms you actually have — a startup with six engineers doesn't need the same stakeholder map as a four-team platform org.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: a future Pillar 10 article on technical strategy documents vs. RFCs vs. ADRs — which artifact fits which decision, picking up where this one's Decision Log section leaves off — and the multiplier-portfolio article, which covers how this RFC's adoption becomes evidence in a promotion packet. Pairs with <a href="no-framework-200-line-harness.html">The No-Framework Option</a> and <a href="hooks-as-deterministic-guardrails.html">Hooks as Deterministic Guardrails</a>, whose mechanisms supply the worked RFC's actual technical substance.</p>
+
+<nav class="pager">
+  <a href="memory-taxonomies-for-agents.html">← PREV — Memory Taxonomies for Agents</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
