@@ -10,7 +10,8 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
 ## Priority 5 — SEO
 
-1. **PARTIALLY ADDRESSED (2026-07-17) for new content only** — No SEO
+1. **PARTIALLY ADDRESSED (2026-07-17 Astro pilot; 2026-07-28 Trends
+   Board + Manual)** — No SEO
    metadata anywhere in the *legacy* site. Audited all HTML files
    (`index.html`, `articles/*.html`, `manual/*.html`): zero real
    `<meta name="description">` tags, zero Open Graph tags, zero Twitter
@@ -22,18 +23,27 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    social sharing, Article/BlogPosting JSON-LD). **Fixed architecturally
    for the Astro pilot** (`site/` — see ADR-0001): its shared
    `BaseLayout` emits real meta description, canonical, OG, Twitter, and
-   JSON-LD tags automatically for every page built through it. **Still
-   open** for `index.html`, `manual/*.html`, and all 7 already-published
-   `articles/*.html` pages, none of which are covered by the Astro pilot
-   yet. High value, low risk — likely needs splitting: (a) add real
-   `<meta description>` + canonical + OG/Twitter tags per page first
-   (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
-   article/module page as a follow-up slice. **Note (2026-07-25):** PR #11
+   JSON-LD tags automatically for every page built through it.
+   **Fixed 2026-07-28** for `index.html` (Trends Board) and all 7
+   `manual/*.html` pages (index + 6 modules): each now emits a real
+   `<meta name="description">` (reusing each page's existing lede
+   paragraph or front-matter-comment description verbatim), a
+   `rel="canonical"` link matching the URL convention already established
+   in `sitemap.xml`, `og:type`/`og:title`/`og:description`/`og:url`/
+   `og:site_name`, and `twitter:card` (`summary` — no
+   `summary_large_image` since the site has no images anywhere) +
+   `twitter:title`/`twitter:description`. **Still open** for all 15
+   already-published `articles/*.html` pages (grew from 7 to 15 since PR
+   #11 was opened), none of which are covered by the Astro pilot yet.
+   JSON-LD Article/BlogPosting schema remains a separate follow-up slice
+   (b) once basic tags exist everywhere. **Note (2026-07-28):** PR #11
    ("Add real SEO meta tags to Articles pages", open since 2026-07-20,
-   targets `main`) already proposes this for `articles/*.html`. A future
-   run picking up slice (a) should check whether #11 has merged first and
-   scope to `index.html` + `manual/*.html` if so, to avoid duplicating
-   in-flight work.
+   targets `main`) still hasn't merged and now only covers 6 of the 15
+   published articles — it will need a rebase (or a fresh
+   implementation covering all 15) before this item can close. A future
+   run picking up the `articles/*.html` slice should check PR #11's
+   status first to avoid duplicating in-flight work, but should not
+   assume it still covers every file.
 2. **DONE (2026-07-18); hardened 2026-07-22; root-caused 2026-07-25** —
    `robots.txt` and `sitemap.xml` at the repo root. **Went stale three
    times.** 2026-07-19: a new article shipped without a sitemap entry

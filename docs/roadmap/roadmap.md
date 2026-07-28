@@ -1,26 +1,23 @@
 # Roadmap
 
-Last reviewed: 2026-07-25. The 2026-07-22 CI check (verify-only,
-missing-entries-only) still let sitemap staleness recur a third time and
-missed a second class of drift (stale `<lastmod>` dates) entirely.
-Replaced the hand-maintained `sitemap.xml` with a generator
-(`scripts/generate-sitemap.sh`) wired into `deploy-pages.yml`, so the
-live sitemap can no longer go stale regardless of what's committed
-(backlog #2). The Immediate items below are otherwise unchanged from the
-2026-07-22 review, with one addition: PR #11 (open since 2026-07-20)
-already covers the `articles/*.html` slice of the SEO-meta-tags item.
+Last reviewed: 2026-07-28. Added real SEO meta tags (description,
+canonical, Open Graph, Twitter Card) to `index.html` and all 7
+`manual/*.html` pages (backlog #1). The designated branch for this run
+had no open PR and had diverged from `main` with stale, unmerged history
+from an old feature line — restarted from `origin/main` before orienting,
+per the designated-branch protocol.
 
 ## Immediate (next 1-3 runs)
 
-- **Add real SEO meta tags per page** (backlog #1, slice a): unique
-  `<meta name="description">`, `rel="canonical"`, Open Graph, and Twitter
-  Card tags on `index.html`, `articles/*.html`, and `manual/*.html` (now
-  16 pages total). PR #11 (open since 2026-07-20) already proposes this
-  for the 7 `articles/*.html` files — check whether it has merged before
-  picking this up; if it has, scope to the remaining `index.html` +
-  `manual/*.html` (9 files). Mechanical, low-risk, high-value. Unaffected
-  by the Astro pilot, which only covers new Articles-stream content going
-  forward.
+- **Add real SEO meta tags to `articles/*.html`** (backlog #1, final
+  slice): unique `<meta name="description">`, `rel="canonical"`, Open
+  Graph, and Twitter Card tags on all 15 published `articles/*.html`
+  pages (index.html and manual/*.html are done as of 2026-07-28). PR #11
+  (open since 2026-07-20) proposes this but only covers 6 of the 15
+  files now and needs a rebase — check its status before picking this up,
+  and don't assume it's still complete even if merged. Likely needs
+  slicing across 2 runs (15 files) to stay within the ~10-file-per-run
+  guideline. Mechanical, low-risk, high-value.
 - **Fix Trends Board heading hierarchy** (backlog #4): confirm intended
   outline, close the h2→h4 gap.
 - **Wire `site/` into CI/deploy, or decide not to.** Now that the pilot's
