@@ -373,6 +373,10 @@ CREATE POLICY tenant_isolation ON messages
   USING (conversation_id IN (
     SELECT id FROM conversations WHERE tenant_id = current_setting('app.tenant_id')::uuid
   ));
+
+-- tool_calls and agent_runs get the same policy shape, joined through
+-- messages/conversations respectively — omitted here for length, not
+-- because the boundary stops at messages.
 </code></pre>
   </div>
 </div>
