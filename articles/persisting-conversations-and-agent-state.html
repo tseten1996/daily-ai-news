@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Persisting Conversations and Agent State: Schema Design in Postgres · The Daily AI News</title>
+<meta name="description" content="A durable, queryable Postgres schema for agent conversations — append-only messages, first-class tool_calls rows, RLS-scoped tenancy, and cursor pagination — and the failure modes that show up when teams reach for a single JSON blob instead.">
+<link rel="canonical" href="https://tseten1996.github.io/daily-ai-news/articles/persisting-conversations-and-agent-state.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Persisting Conversations and Agent State: Schema Design in Postgres">
+<meta property="og:description" content="Append-only messages, first-class tool_calls rows, RLS-scoped tenancy, and cursor pagination — the Postgres schema that makes an agent conversation a system of record instead of a cache.">
+<meta property="og:url" content="https://tseten1996.github.io/daily-ai-news/articles/persisting-conversations-and-agent-state.html">
+<meta property="og:site_name" content="The Daily AI News">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Persisting Conversations and Agent State: Schema Design in Postgres">
+<meta name="twitter:description" content="The relational schema that turns an agent conversation into an auditable system of record — append-only messages, tool_calls, RLS, and cursor pagination.">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Persisting Conversations and Agent State: Schema Design in Postgres",
+  "description": "A durable, queryable Postgres schema for agent conversations — append-only messages, first-class tool_calls rows, RLS-scoped tenancy, and cursor pagination — and the failure modes that show up when teams reach for a single JSON blob instead.",
+  "datePublished": "2026-07-28",
+  "url": "https://tseten1996.github.io/daily-ai-news/articles/persisting-conversations-and-agent-state.html",
+  "author": { "@type": "Organization", "name": "The Daily AI News" },
+  "publisher": { "@type": "Organization", "name": "The Daily AI News" }
+}
+</script>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Persisting Conversations and Agent State: Schema Design in Postgres
+  slug: persisting-conversations-and-agent-state
+  pillar: Pillar 9 — Full-Stack Agentic Engineering
+  difficulty: Practitioner
+  series: none (standalone; sets up Pillar 9's multi-user agent sessions and deploying-the-full-stack articles, which assume this schema as their storage layer)
+  tags: agent-state, conversation-persistence, postgres, schema-design, row-level-security, supabase
+  meta description: A durable, queryable Postgres schema for agent conversations — append-only messages, first-class tool_calls rows, RLS-scoped tenancy, and cursor pagination — and the failure modes that show up when teams reach for a single JSON blob instead.
+  read time: ~11 min (~2,100 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · FULL-STACK AGENTIC ENGINEERING</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 9 · Full-Stack Agentic Engineering</div>
+  <h1>Persisting Conversations and Agent State: Schema Design in Postgres</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">Every team gets fast, resumable streaming working first — an SSE channel, a Redis buffer for reconnects — and treats that as "the conversation is saved." It isn't. The moment someone needs to audit a tool call, enforce tenant isolation, or answer "what did the agent actually do" a week later, the durable system of record has to live somewhere else: a relational schema built to be queried, not just replayed.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-28</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~11 min (~2,100 words)</b></span>
+    <span>LAB <b>seed a Postgres schema, prove cursor pagination and RLS tenant isolation with curl</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>Three days after closing a support ticket, a customer disputes a refund the agent "never made." An engineer pulls up the conversation to check — and there isn't one. The chat lived in the browser's local state and a 24-hour Redis stream used to replay a mid-session reconnect (see <a href="streaming-agent-output-to-the-browser.html">Streaming Agent Output to the Browser</a>); neither was ever built to outlive the tab. The only surviving evidence is a row in the payments ledger with no context attached: which agent run produced it, from which turn, under whose authorization. The team had built a fast, resumable chat. They had never built a system of record.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>The fastest way to ship an agent chat is to keep the whole message array as one JSON value — in memory during a demo, then in a single <code>TEXT</code> or <code>JSONB</code> column on a <code>conversations</code> row once someone insists on "persistence." Appending a turn becomes <code>UPDATE conversations SET messages = messages || $1 WHERE id = $2</code>. It works, right up until two browser tabs write to the same conversation, or a retried request lands twice — then it's a classic read-modify-write race: two concurrent updates both read the same old array, both append, and whichever commits last silently erases the other's turn. Financial systems hit this exact bug with mutable ledgers decades before agents existed, which is why every accounting system since has used an append-only journal of immutable facts instead of one document everyone races to edit in place.</p>
+<p>The other common shortcut is outsourcing state entirely to a model provider's hosted conversation API — convenient for a prototype, since there's no schema to design at all. It stops working the moment the product needs anything the vendor's thread object doesn't model: joining a conversation to your own tenant and subscription tables, enforcing row-level security per customer, or recording a tool call as a structured, auditable fact instead of a sentence buried in assistant text. A hosted thread is a cache of the conversation the provider is willing to keep; it was never meant to be your system of record.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>Treat a conversation the way an event-sourced ledger treats an account: an aggregate root (<code>conversations</code>) with an append-only stream of immutable facts (<code>messages</code>), where anything structured enough to audit or bill against — a tool invocation — gets its own first-class row (<code>tool_calls</code>) instead of living as prose inside a message. A separate <code>agent_runs</code> table tracks one row per loop invocation, holding the model, token counts, and a checkpoint pointer the harness uses to resume after a crash — the same checkpoint concept <a href="no-framework-200-line-harness.html">The No-Framework Option</a> builds inside a single process, now durable across restarts. Every table carries a <code>tenant_id</code> path back to <code>conversations</code>, enforced by Postgres row-level security so a bug in one API handler's <code>WHERE</code> clause can't leak another customer's history — the database, not application code, is the last line of defense.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 880 470" role="img" aria-label="Diagram: a user message is inserted as a row, an agent run starts and streams tokens over SSE to the frontend while buffering state in a checkpoint, tool calls are inserted as their own rows keyed by idempotency key, the final assistant message is inserted once complete, and the frontend later reads history back through a cursor-paginated API endpoint scoped by row-level security.">
+  <defs>
+    <marker id="ta4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="20" y="32" width="380" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="210" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">user sends turn · reads history via cursor GET</text>
+  <path d="M210 74 L210 112" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <text x="20" y="102" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="112" width="380" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="133" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">INSERT messages(role=user) · SET LOCAL app.tenant_id</text>
+  <path d="M210 154 L210 192" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <text x="20" y="182" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME</text>
+  <rect x="20" y="192" width="380" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="210" y="212" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">agent_runs row starts · streams tokens over SSE</text><text x="210" y="226" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">partial output buffered in checkpoint, not yet in messages</text>
+
+  <rect x="440" y="192" width="420" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="650" y="212" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">tool call → INSERT tool_calls (idempotency_key)</text><text x="650" y="226" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">ON CONFLICT DO NOTHING — safe on harness retry</text>
+  <path d="M400 215 L436 215" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <text x="20" y="270" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER</text>
+  <rect x="20" y="278" width="380" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="210" y="298" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">run complete → INSERT messages(role=assistant)</text><text x="210" y="311" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">single insert, never updated in place</text>
+  <path d="M210 238 L210 274" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <rect x="20" y="344" width="480" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-dasharray="4 3"/><text x="260" y="364" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">RLS policy: conversation_id IN (tenant-scoped subselect)</text><text x="260" y="377" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">enforced on every SELECT, not just the API's WHERE clause</text>
+  <path d="M210 324 L210 340" fill="none" stroke="var(--ink)" stroke-width="1.2" marker-end="url(#ta4)"/>
+
+  <path d="M700 324 L700 420 L210 420 L210 396" fill="none" stroke="var(--accent)" stroke-width="1.1" stroke-dasharray="3 2" marker-end="url(#ta4)"/>
+  <text x="700" y="316" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">GET /conversations/:id/messages?after=seq</text>
+  <rect x="580" y="278" width="240" height="46" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="700" y="298" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">frontend dedups by message id</text><text x="700" y="311" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">against live SSE events, on reconnect</text>
+</svg>
+<figcaption><b>FIG 3.1</b> — Every write is an INSERT, never an UPDATE to a shared document; the only mutation Postgres does on your behalf is enforcing the RLS policy on every SELECT.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">sequenceDiagram
+  participant FE as Frontend
+  participant API as API layer
+  participant AR as Agent runtime
+  participant DB as Postgres
+
+  FE->>API: POST turn
+  API->>DB: INSERT messages(role=user)
+  API->>AR: start run
+  AR->>DB: INSERT agent_runs(status=running)
+  AR->>DB: INSERT tool_calls(idempotency_key) ON CONFLICT DO NOTHING
+  AR->>DB: INSERT messages(role=assistant), UPDATE agent_runs(status=complete)
+  FE->>API: GET messages?after=seq
+  API->>DB: SET LOCAL app.tenant_id; SELECT ... WHERE seq > $1
+  DB-->>API: rows (RLS-filtered)
+  API-->>FE: messages + nextCursor</pre>
+</details>
+</figure>
+
+<h3>Layer 4 — data/infra: the schema (SQL)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">SQL — conversations, messages, tool_calls, agent_runs, RLS</button></div>
+  <div class="tab-panel">
+<pre><code>CREATE TABLE conversations (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   UUID NOT NULL,
+  user_id     UUID NOT NULL,
+  title       TEXT,
+  status      TEXT NOT NULL DEFAULT 'active',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Append-only: every row is written once via INSERT. seq is a single
+-- globally monotonic identity — not reset per conversation — used purely
+-- as a stable, gap-tolerant cursor for pagination and ordering.
+CREATE TABLE messages (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id),
+  seq             BIGINT GENERATED ALWAYS AS IDENTITY,
+  role            TEXT NOT NULL CHECK (role IN ('user','assistant','system','tool')),
+  content         JSONB NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'complete' CHECK (status IN ('complete','failed')),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (conversation_id, seq)
+);
+
+-- First-class, not prose inside a message. idempotency_key follows the
+-- same pattern as Tool Design as API Design's harness-minted key.
+CREATE TABLE tool_calls (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id      UUID NOT NULL REFERENCES messages(id),
+  tool_name       TEXT NOT NULL,
+  arguments       JSONB NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  result          JSONB,
+  status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','ok','error')),
+  started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at    TIMESTAMPTZ
+);
+
+CREATE TABLE agent_runs (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id),
+  model           TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','complete','failed')),
+  checkpoint      JSONB,              -- in-flight buffer; see no-framework harness article
+  input_tokens    INT,
+  output_tokens   INT,
+  started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ended_at        TIMESTAMPTZ
+);
+
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON conversations
+  USING (tenant_id = current_setting('app.tenant_id')::uuid);
+
+CREATE POLICY tenant_isolation ON messages
+  USING (conversation_id IN (
+    SELECT id FROM conversations WHERE tenant_id = current_setting('app.tenant_id')::uuid
+  ));
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 3 — agent runtime: writing a turn (Python)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">Python — asyncpg, called once a turn finishes</button></div>
+  <div class="tab-panel">
+<pre><code># pip install asyncpg
+import json
+
+async def persist_turn(pool, conversation_id, role, content, tool_calls=None):
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            message_id = await conn.fetchval(
+                """INSERT INTO messages (conversation_id, role, content, status)
+                   VALUES ($1, $2, $3, 'complete') RETURNING id""",
+                conversation_id, role, json.dumps(content),
+            )
+            for tc in tool_calls or []:
+                # Same idempotency key the harness minted before calling the
+                # tool (Tool Design as API Design) is reused here — a crash
+                # between "tool executed" and "row persisted", followed by a
+                # harness retry, hits ON CONFLICT DO NOTHING instead of a
+                # second row for a refund that already happened once.
+                await conn.execute(
+                    """INSERT INTO tool_calls
+                         (message_id, tool_name, arguments, idempotency_key, result, status, completed_at)
+                       VALUES ($1, $2, $3, $4, $5, $6, now())
+                       ON CONFLICT (idempotency_key) DO NOTHING""",
+                    message_id, tc["name"], json.dumps(tc["args"]),
+                    tc["idempotency_key"], json.dumps(tc["result"]), tc["status"],
+                )
+    return message_id
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 2 — API/transport: cursor-paginated history (TypeScript)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — Express, RLS-scoped via SET LOCAL</button></div>
+  <div class="tab-panel">
+<pre><code>// GET /conversations/:id/messages?after=<seq>&limit=50
+app.get("/conversations/:id/messages", async (req, res) => {
+  const { id } = req.params;
+  const after = Number(req.query.after ?? 0);
+  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // req.auth.tenantId comes from the verified session, never the query
+    // string — RLS enforces it below even if a handler forgets to filter.
+    await client.query("SET LOCAL app.tenant_id = $1", [req.auth.tenantId]);
+    const { rows } = await client.query(
+      `SELECT id, seq, role, content, created_at FROM messages
+       WHERE conversation_id = $1 AND seq > $2
+       ORDER BY seq ASC LIMIT $3`,
+      [id, after, limit]
+    );
+    await client.query("COMMIT");
+    res.json({ messages: rows, nextCursor: rows.at(-1)?.seq ?? after });
+  } finally {
+    client.release();
+  }
+});
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer 1 — frontend: merging persisted history with live SSE (TypeScript / React)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — history load + SSE dedup by message id</button></div>
+  <div class="tab-panel">
+<pre><code>function useConversationHistory(conversationId: string) {
+  const [messages, setMessages] = useState&lt;Message[]&gt;([]);
+  const seenIds = useRef(new Set&lt;string&gt;());
+
+  useEffect(() => {
+    fetch(`/api/conversations/${conversationId}/messages?limit=200`)
+      .then(r => r.json())
+      .then(({ messages: initial }) => {
+        initial.forEach((m: Message) => seenIds.current.add(m.id));
+        setMessages(initial);
+      });
+  }, [conversationId]);
+
+  // Live tokens arrive over the SSE channel from the streaming article's
+  // reconnect protocol; dedup by the DB-assigned message id so a replayed
+  // event after a reconnect never renders the same turn twice.
+  useAgentEventStream(conversationId, (event) => {
+    if (event.type === "message.complete" && !seenIds.current.has(event.message.id)) {
+      seenIds.current.add(event.message.id);
+      setMessages(prev => [...prev, event.message]);
+    }
+  });
+
+  return messages;
+}
+</code></pre>
+  </div>
+</div>
+<p>Notice the seam: Layer 3 never talks to the frontend directly, and Layer 1 never talks to Postgres directly. The agent runtime's job ends at a committed row; the API layer's job is turning committed rows into a cursor-stable page; the frontend's job is reconciling that page against whatever live events already arrived over SSE. Each layer can be tested — and fail — independently of the others, which is the whole point of not collapsing them into one JSONB write path.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>The mutable-JSONB race.</strong> Symptom: the message count in Postgres doesn't match the span count in your <a href="opentelemetry-for-agents-full-stack-tracing.html">OpenTelemetry</a> trace for the same conversation — a tool call clearly executed and clearly traced, but its turn is missing from the stored array. Two concurrent <code>UPDATE conversations SET messages = messages || $1</code> statements (two tabs, or a harness retry) both read the same old array and one commits over the other. Append-only <code>INSERT</code> rows can't lose a write this way — there's no shared document to race over.</li>
+<li><strong>No idempotency key on the persistence write itself.</strong> Symptom: a tool call that Layer 3's API-level idempotency key already deduplicated at the HTTP boundary (per <a href="tool-design-as-api-design.html">Tool Design as API Design</a>) still shows up twice in <code>tool_calls</code>, because the harness crashed after executing the tool but before committing the row, then retried the whole turn from its checkpoint. The API layer's key protects the HTTP call; the persistence layer needs its own <code>UNIQUE</code> constraint on the same key, or a retried write duplicates the audit trail even though the underlying refund only happened once.</li>
+<li><strong>A forgotten tenant filter, caught by nobody.</strong> Symptom: a support engineer investigating customer A's ticket pulls up message rows belonging to customer B. Code review approved the endpoint because the <code>WHERE conversation_id = $1</code> clause looked scoped — but nothing checked that the conversation itself belonged to the caller's tenant. RLS turns this from an application bug into a database-enforced invariant: without <code>SET LOCAL app.tenant_id</code> set to the caller's real tenant, the policy returns zero rows regardless of what the query's <code>WHERE</code> clause says.</li>
+<li><strong>No cursor, full-array reads.</strong> Symptom: a long-lived support thread that's accumulated a few thousand turns starts taking seconds to load, and every SSE reconnect re-fetches the entire history instead of just what's new. Profiling points at "the LLM is slow" until someone notices the multi-megabyte JSON payload on every page load — the <code>seq</code>-based cursor in Layer 2 exists specifically so a reconnect (or a return visit) only pulls what the client doesn't already have.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — normalized schema vs. a JSONB blob</div>
+<p>Reach for the normalized, append-only schema — separate <code>messages</code>, <code>tool_calls</code>, and <code>agent_runs</code> tables — the moment you need to query <em>within</em> a conversation: audit which tool ran and when, compute cost-per-run from token counts, enforce row-level tenant isolation, or reconcile a tool call against an external ledger by its own id. That's most production agent products the moment they leave a demo, because "what did the agent actually do" is exactly the question a support or compliance team eventually asks.</p>
+<p>Stay with a single JSONB array column only for the narrowest case: an internal, single-tenant debugging tool with no compliance surface and nobody downstream ever querying inside a conversation. Even then, keep it in Postgres — not browser storage, not a TTL'd cache — because durability, not schema shape, is the property this article is actually about. A JSONB blob in a real database beats a perfect relational schema that only exists in a tab someone can close.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> stand up the §3 schema against a real Postgres instance, seed one conversation, and prove with <code>curl</code> that cursor pagination and RLS tenant isolation both actually work — not just that the endpoint returns 200.</p>
+<ol>
+<li>Run Postgres locally: <code>docker run -d --name pg -e POSTGRES_PASSWORD=pw -p 5432:5432 postgres:16</code>, then apply the full DDL from §3, including both <code>CREATE POLICY</code> statements.</li>
+<li>Insert one row into <code>conversations</code> with a known <code>tenant_id</code> (call it <code>tenant-a</code>), then use the §3 Python <code>persist_turn</code> function (or equivalent raw SQL) to insert a user message, an assistant message, and one <code>tool_calls</code> row referencing it.</li>
+<li>Run the Express handler from §3 locally (<code>ts-node server.ts</code>), with <code>req.auth.tenantId</code> hardcoded to <code>tenant-a</code> for this step. <code>curl "localhost:3000/conversations/<id>/messages?limit=50"</code> and confirm both messages come back in <code>seq</code> order.</li>
+<li>Re-run the same <code>curl</code> with <code>after=&lt;first message's seq&gt;</code> and confirm only the second message is returned — the cursor, not an offset, is doing the filtering.</li>
+<li>Change the hardcoded tenant to a random, unrelated UUID and repeat step 3's request. Confirm the response is an empty <code>messages</code> array — RLS blocking the read even though the <code>conversation_id</code> in the URL is exactly correct.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ The first <code>curl</code> call returns exactly 2 messages, ordered by ascending <code>seq</code>.</li>
+<li>✅ The cursored call with <code>after</code> set returns exactly 1 message — the one after the cursor, not the full history.</li>
+<li>✅ The wrong-tenant call returns <code>{"messages": [], "nextCursor": 0}</code>, proving RLS enforces isolation independent of the URL's <code>conversation_id</code>.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A teammate proposes dropping the <code>tool_calls</code> table: "the assistant message's content already describes what tool ran and what it returned, so we're duplicating data." What operational capability does the team lose, and how would you push back?</strong></p>
+<p><em>Strong answer sketch: the message content is a rendering-oriented summary the model produced, in prose it phrases however it phrases it that turn — it is not a stable, queryable fact. Without a first-class <code>tool_calls</code> row, you lose the ability to compute cost- or call-count-per-tool without parsing free text; you lose a place to store the persistence-layer idempotency key from failure mode 2, so a crash-and-retry has no constraint to dedupe against; you lose the ability to reconcile a specific tool invocation against an external system (a payments ledger, a ticket ID) by a stable identifier instead of a string match; and you couple the audit trail to whatever the model happened to say, which can omit a call, misdescribe an argument, or simply change wording across a prompt update — the exact drift <a href="tool-descriptions-are-prompts.html">Tool Descriptions Are Prompts</a> warns about, now infecting your own audit log instead of just tool selection. The right framing: <code>content</code> is what the user sees; <code>tool_calls</code> is what actually happened. Collapsing them makes the audit trail only as reliable as the model's prose, which is precisely the property a system of record can't depend on.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://www.postgresql.org/docs/current/ddl-rowsecurity.html">PostgreSQL — Row Security Policies</a> (the <code>CREATE POLICY</code> mechanism and <code>current_setting</code> session-variable pattern §3's RLS policies are built on)</li>
+<li><a href="https://supabase.com/docs/guides/database/postgres/row-level-security">Supabase — Row Level Security</a> (production RLS patterns for a multi-tenant chat-shaped schema, including policy performance pitfalls at scale)</li>
+<li><a href="https://docs.claude.com/en/api/messages">Anthropic — Messages API</a> (client-managed conversation state with no server-side thread object — the contrast that motivates owning your own persistence layer instead of relying on a provider's)</li>
+<li><a href="https://google.aip.dev/158">Google AIP-158 — Pagination</a> (the cursor-token pagination convention, as opposed to page/offset, that this article's <code>seq</code>-based cursor follows)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-28 · Stable: append-only event logging and Postgres row-level security as an enforced tenant-isolation boundary are established relational-database practice and not expected to change. Worth rechecking: Supabase's specific RLS-plus-Realtime interaction for streaming reads, which the vendor iterates on faster than the underlying Postgres RLS mechanism itself.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: Pillar 9's multi-user agent sessions and deploying-the-full-stack articles, both of which assume this schema as their storage layer. Pairs with <a href="streaming-agent-output-to-the-browser.html">Streaming Agent Output to the Browser</a> for the live transport this schema durably backs, <a href="tool-design-as-api-design.html">Tool Design as API Design</a> for the idempotency-key pattern reused in <code>tool_calls</code>, and <a href="no-framework-200-line-harness.html">The No-Framework Option</a> for the harness-owned checkpoint concept <code>agent_runs.checkpoint</code> extends across restarts.</p>
+
+<nav class="pager">
+  <a href="writing-an-rfc-that-gets-funded.html">← PREV — Writing an RFC That Gets Funded</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>
