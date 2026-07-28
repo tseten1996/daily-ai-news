@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-25 (sitemap staleness recurred a third time; replaced the hand-maintained `sitemap.xml` with a generator wired into deploy — see backlog #2)
+Last reviewed: 2026-07-28 (added real SEO meta tags to `index.html` and `manual/*.html` — see backlog #1)
 
 ## What this repository is
 
@@ -90,7 +90,9 @@ docs/                    This knowledge base (architecture-review agent's memory
   elements at load time and renders the bookmark-card board, date
   groupings, tag filters, and counts client-side. There is no separate
   table-of-contents to maintain — the DOM *is* the data source.
-- As of this review: 16 topic articles on the board.
+- As of this review: 16 topic articles on the board. `index.html` now
+  carries real SEO meta tags (description, canonical, Open Graph, Twitter
+  Card) as of 2026-07-28 — see `docs/seo/checklist.md`.
 
 ### 2. Field Manual (`manual/`)
 - A 16-module curriculum ("The Agentic Systems Field Manual") plus 3
@@ -103,12 +105,14 @@ docs/                    This knowledge base (architecture-review agent's memory
   difficulty, series, tags, meta description, read time) that is metadata
   only — not rendered on the page.
 - As of this review: modules 00–05 published (6/16), module 06 queued
-  next.
+  next. `manual/index.html` and all 6 published modules now carry real
+  SEO meta tags (description, canonical, Open Graph, Twitter Card) as of
+  2026-07-28 — see `docs/seo/checklist.md`.
 
 ### 3. Articles — legacy (`articles/`) and pilot (`site/`)
 - A "pillar"-organized full-stack agentic engineering article stream,
   tracked via `articles/LEDGER.md` for dedup by topic/concept rather than
-  exact title match. As of this review: 8 articles published, all as
+  exact title match. As of this review: 14 articles published, all as
   legacy hand-authored HTML.
 - **The Astro pilot (`site/`, ADR-0001) exists but new articles are still
   being authored in the legacy format** — the pilot was never wired into
