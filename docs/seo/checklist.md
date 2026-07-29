@@ -1,6 +1,14 @@
 # SEO Checklist
 
-Last reviewed: 2026-07-25 (sitemap staleness recurred a third time; the
+Last reviewed: 2026-07-29. **Caveat: as of this review, `Deploy to GitHub
+Pages` has failed on 18/18 runs since it was created (see
+`docs/technical-debt/backlog.md` #14) — every row below describes what's
+committed to `main`, not confirmed to be reachable by a crawler.** Also
+paused: item #1 (real meta tags) has three separate unmerged PRs already
+proposing overlapping fixes (backlog #15) — do not open a fourth until
+those are triaged.
+
+Prior review: 2026-07-25 (sitemap staleness recurred a third time; the
 verify-only CI check itself was replaced with a generated sitemap — see
 maintenance note below). The table
 below reflects the **legacy pages** (`index.html`, `manual/*.html`, and
