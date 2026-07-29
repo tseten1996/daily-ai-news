@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Subagents as Context Isolation: What Never Reaches the Parent's Window · The Daily AI News</title>
+<!--
+  FRONT MATTER (ledger entry for future runs)
+  title: Subagents as Context Isolation: What Never Reaches the Parent's Window
+  slug: subagents-as-context-isolation
+  pillar: Pillar 1 — Architectures
+  difficulty: Practitioner
+  series: none (standalone; sets up future Pillar 1 handoff-semantics and typed-proposal-boundary articles)
+  tags: subagents, context-isolation, multi-agent, agent-architecture, context-engineering, claude-agent-sdk
+  meta description: Spawning a subagent isn't primarily about parallelism — it's about keeping a bulky, disposable exploration out of the parent loop's context entirely. The return-contract, persistence, and UI that make that isolation hold, and what breaks when it doesn't.
+  read time: ~10 min (~1,950 words)
+-->
+<style>
+  :root {
+    --paper: #f4f3ee;
+    --grid: rgba(30, 60, 110, .055);
+    --ink: #1b2430;
+    --muted: #5d6674;
+    --accent: #0e63d0;
+    --accent-soft: rgba(14, 99, 208, .09);
+    --panel: #ffffff;
+    --border: #d8d6cc;
+    --code-bg: #101720;
+    --code-text: #dce6f2;
+    --warn: #a03d0e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0d1420;
+      --grid: rgba(120, 170, 255, .06);
+      --ink: #dfe6ef;
+      --muted: #8b95a5;
+      --accent: #58a2f5;
+      --accent-soft: rgba(88, 162, 245, .12);
+      --panel: #131c2b;
+      --border: #263349;
+      --code-bg: #0a0f16;
+      --code-text: #d5e0ee;
+      --warn: #f5a35e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.68;
+    font-size: 1.02rem;
+  }
+  .mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+  a { color: var(--accent); }
+
+  .topbar {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .08em;
+    display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1.1rem 0; border-bottom: 1.5px solid var(--ink);
+    text-transform: uppercase;
+  }
+  .topbar a { color: var(--ink); text-decoration: none; }
+  .topbar a:hover { color: var(--accent); }
+
+  header.mod {
+    padding: 2.4rem 0 1.6rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .doc-id {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+  }
+  header.mod h1 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: clamp(1.6rem, 4.5vw, 2.35rem);
+    letter-spacing: -.02em; line-height: 1.15;
+    margin: .45rem 0 .8rem;
+  }
+  .meta-row {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; color: var(--muted);
+    display: flex; gap: 1.4rem; flex-wrap: wrap;
+  }
+  .meta-row b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.32rem; letter-spacing: -.01em;
+    margin: 3rem 0 .8rem;
+    display: flex; align-items: baseline; gap: .7rem;
+  }
+  h2 .sec {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .78rem; color: var(--accent); font-weight: 700; letter-spacing: .08em;
+  }
+  h3 {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 1.05rem; margin: 1.8rem 0 .5rem;
+  }
+
+  figure.fig {
+    margin: 1.6rem 0; padding: 1.2rem;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 6px;
+    overflow-x: auto;
+  }
+  figure.fig svg { display: block; min-width: 640px; width: 100%; height: auto; }
+  figure.fig figcaption {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-top: .9rem;
+    border-top: 1px dashed var(--border); padding-top: .7rem;
+  }
+  figure.fig figcaption b { color: var(--accent); }
+  details.mermaid-src { margin-top: .6rem; font-size: .8rem; }
+  details.mermaid-src summary {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); cursor: pointer;
+  }
+  .svg-label { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
+  .code-tabs { margin: 1.4rem 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .tab-row { display: flex; gap: 0; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .74rem; letter-spacing: .06em;
+    padding: .55rem 1.1rem; border: 0; background: transparent; color: var(--muted);
+    cursor: pointer; border-right: 1px solid var(--border);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-btn.active { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
+  .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .code-tabs pre { margin: 0; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.55; color: var(--code-text); }
+  pre, code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  pre.plain { background: var(--code-bg); color: var(--code-text); padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto; font-size: .82rem; line-height: 1.55; }
+  p code, li code, td code {
+    background: var(--accent-soft); border-radius: 4px;
+    padding: .06em .32em; font-size: .84em; color: var(--ink);
+  }
+
+  aside.judgment {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px dashed var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+  }
+  aside.judgment .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: .5rem;
+  }
+  aside.judgment p { margin: .5rem 0; font-size: .95rem; }
+
+  .failure {
+    margin: 1.8rem 0; padding: 1.1rem 1.3rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--warn);
+    border-radius: 4px;
+  }
+  .failure .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .7rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--warn); font-weight: 700; margin-bottom: .5rem;
+  }
+  .failure ol, .failure ul { margin: .4rem 0 .2rem 1.2rem; padding: 0; }
+  .failure li { margin-bottom: .55rem; font-size: .95rem; }
+
+  .block {
+    margin: 1.8rem 0; padding: 1.2rem 1.4rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .block > .hd {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: .72rem; letter-spacing: .14em; text-transform: uppercase;
+    font-weight: 700; color: var(--ink);
+    padding-bottom: .5rem; margin-bottom: .8rem;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .block ol li, .block ul li { margin-bottom: .5rem; }
+
+  .pager {
+    display: flex; justify-content: space-between; gap: 1rem;
+    margin-top: 3.5rem; padding-top: 1.2rem; border-top: 1.5px solid var(--ink);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem;
+  }
+  .pager .disabled { color: var(--muted); }
+  ol li, ul li { margin-bottom: .4rem; }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab-btn { transition: color .12s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="topbar">
+  <a href="index.html">← All Articles</a>
+  <span>THE DAILY AI NEWS · ARCHITECTURES</span>
+  <a href="../index.html">Trends Board</a>
+</nav>
+
+<header class="mod">
+  <div class="doc-id">Pillar 1 · Architectures</div>
+  <h1>Subagents as Context Isolation: What Never Reaches the Parent's Window</h1>
+  <p style="margin:.2rem 0 1rem; color:var(--muted); font-size:1.02rem;">A subagent isn't mainly a way to parallelize work — it's a way to let something read 400 files, run 30 tool calls, and go down two dead ends, without a single token of that mess ever landing in the conversation the parent model actually reasons over.</p>
+  <div class="meta-row">
+    <span>PUBLISHED <b>2026-07-29</b></span>
+    <span>DIFFICULTY <b>Practitioner</b></span>
+    <span>READ <b>~10 min (~1,950 words)</b></span>
+    <span>LAB <b>prove the parent's context stays flat while a subagent's own persisted transcript grows</b></span>
+  </div>
+</header>
+
+<h2><span class="sec">§1</span> Cold open</h2>
+<p>A code-migration agent is 30 turns into a session and hasn't made its first edit yet. A <code>grep -r</code> for a deprecated API across a monorepo returns 380 matches; the harness dutifully appends all 380 lines, and then every file the agent subsequently opens to check call sites, straight into the same message list the model reasons over on every turn. By turn 24 the agent contradicts a scoping decision it made on turn 6 — not because it changed its mind, but because turn 6 is now buried under 60,000 tokens of file dumps and grep output, and whatever attention the model has left for it has degraded. The team's first fix is a bigger context window. It buys two more days, until the same failure shows up again at 500 matches instead of 380.</p>
+
+<h2><span class="sec">§2</span> The problem this solves — and what engineers did before it</h2>
+<p>The instinct is to treat this as a context-window sizing problem, and windows have in fact gotten much bigger — but the failure in the cold open isn't about running out of tokens, it's about signal-to-noise inside the tokens that fit. A decision made on turn 6 is exactly as real whether it's surrounded by 5,000 tokens of unrelated file contents or 60,000; what changes is how much of the model's attention that decision has to compete for on every subsequent turn. <a href="context-compaction-for-long-running-agents.html">Compaction for Long-Running Agents</a> covers the standard answer to that once it's already happened: summarize old turns down to something smaller. But compaction is damage control — it runs after the bulky, disposable exploration has already polluted the one context the agent reasons over for the rest of the session, and every summarization pass risks losing something the next step still needed.</p>
+<p>Before subagents were a first-class primitive, teams tried to prevent the pollution instead of cleaning it up after the fact: prompt the agent to "be concise" when grepping (unreliable — the model doesn't control how many matches a shell command returns), or run a separate offline script to pre-summarize a codebase before the agent ever sees it (rigid — it only covers queries anticipated in advance). What both approaches were reaching for, without naming it, is a boundary: some work is bulky and disposable and distills to a small answer, and that work should happen somewhere its raw output physically cannot reach the parent's context, no discipline required. A subagent is that boundary made structural. It's a fresh conversation with its own context window and its own tool access; the parent hands it a scoped brief, it does whatever exploratory work that requires — however many tool calls, however many tokens — entirely on its own, and only its final, typed return value is appended to the parent as a single message. The 380 grep matches exist; they just never enter the room where the migration decision gets made.</p>
+
+<h2><span class="sec">§3</span> How it actually works</h2>
+<p>The mechanism has one property that does all the work: a subagent's context starts fresh and nothing it reads or calls flows back to the parent automatically — only an explicit return value does. That means the contract on that return value is the entire interface. Get it wrong — free text instead of a schema, a summary field with nowhere to put a caveat — and isolation degrades back into the cold open's problem one level removed. FIG 3.1 traces a single delegated call across all four layers: the parent's delegate tool call, the subagent's own isolated loop, a persisted record of what the subagent actually did (kept for audit even though the parent never reads it), a progress channel the UI consumes, and an inspector card that lets a human see the isolated transcript on demand without it ever touching the main scrollback.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 900 500" role="img" aria-label="Flow: parent agent calls a delegate tool with a scoped brief; a subagent runs its own isolated loop with its own tool calls; only a schema-validated summary returns to the parent's message list; the full isolated transcript is persisted to a subagent_runs table the parent never reads; a progress channel streams status to a frontend inspector card.">
+  <defs>
+    <marker id="sc1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <text x="20" y="24" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME — PARENT</text>
+  <rect x="20" y="32" width="300" height="46" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="170" y="53" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">parent: delegate("find call sites of X")</text><text x="170" y="67" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">scoped brief, not the parent's own history</text>
+
+  <text x="20" y="122" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">AGENT RUNTIME — SUBAGENT (fresh context)</text>
+  <rect x="20" y="130" width="300" height="52" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/><text x="170" y="151" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">subagent: grep, open files, cross-check</text><text x="170" y="165" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">30 tool calls, 60k tokens — own context only</text>
+  <path d="M170 78 L170 126" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#sc1)"/>
+
+  <rect x="380" y="130" width="280" height="52" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.4"/><text x="520" y="151" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">forced schema return: files[], caveats[], confidence</text><text x="520" y="165" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">the ONLY thing that crosses back</text>
+  <path d="M320 156 L380 156" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#sc1)"/>
+  <path d="M520 182 L520 210 L170 210 L170 240" fill="none" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#sc1)"/>
+  <text x="345" y="203" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">appended to parent as ONE message</text>
+
+  <rect x="20" y="246" width="300" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="170" y="267" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">parent context: unchanged size regardless of N matches</text><text x="170" y="280" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">the whole point of the boundary</text>
+
+  <text x="380" y="234" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">DATA / INFRA LAYER</text>
+  <rect x="380" y="246" width="280" height="46" rx="5" fill="none" stroke="var(--warn)" stroke-width="1.3"/><text x="520" y="267" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">subagent_runs: full isolated transcript</text><text x="520" y="280" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">persisted for audit — parent never reads it back</text>
+  <path d="M320 156 L340 156 L340 269 L380 269" fill="none" stroke="var(--warn)" stroke-width="1.2" marker-end="url(#sc1)" stroke-dasharray="3 3"/>
+
+  <text x="20" y="378" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">API / TRANSPORT LAYER</text>
+  <rect x="20" y="386" width="300" height="42" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.3"/><text x="170" y="407" text-anchor="middle" class="svg-label" font-size="9.5" fill="var(--ink)">SSE: subagent progress channel</text><text x="170" y="420" text-anchor="middle" class="svg-label" font-size="8.5" fill="var(--muted)">status only — never fed back into the parent's prompt</text>
+  <path d="M170 288 L170 382" fill="none" stroke="var(--ink)" stroke-width="1.1" marker-end="url(#sc1)"/>
+
+  <text x="20" y="433" class="svg-label" font-size="10.5" font-weight="700" fill="var(--muted)">FRONTEND / UX</text>
+  <rect x="20" y="440" width="640" height="42" rx="5" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/><text x="340" y="461" text-anchor="middle" class="svg-label" font-size="10" fill="var(--ink)">collapsed inspector card: "explore-callsites · running · 41k tok" — expand for full transcript</text>
+  <path d="M320 407 L340 407 L340 436" fill="none" stroke="var(--ink)" stroke-width="1.1" marker-end="url(#sc1)"/>
+</svg>
+<figcaption><b>FIG 3.1</b> — Everything above the dashed line stays inside the subagent's own context and its persisted record. Only the schema-validated return crosses the boundary into the parent's message list.</figcaption>
+<details class="mermaid-src"><summary>Mermaid source</summary>
+<pre class="plain">flowchart TB
+  A["parent: delegate(scoped brief)"] --> B["subagent: own context, own tool calls"]
+  B --> C["forced schema return: files/caveats/confidence"]
+  C --> D["parent context: unchanged size"]
+  B -.-> E["subagent_runs: full isolated transcript persisted"]
+  B --> F["SSE: progress channel"]
+  F --> G["frontend: inspector card, expandable"]</pre>
+</details>
+</figure>
+
+<h3>Layer C — agent runtime: the delegate tool and the subagent's own loop (TypeScript)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">TypeScript — delegate() forces a schema return, never the raw transcript</button></div>
+  <div class="tab-panel">
+<pre><code>const SUBAGENT_RETURN_SCHEMA = {
+  type: "object",
+  required: ["files", "caveats", "confidence"],
+  properties: {
+    files: { type: "array", items: { type: "string" } },
+    caveats: { type: "array", items: { type: "string" } }, // e.g. scope limits the parent must not ignore
+    confidence: { type: "string", enum: ["high", "medium", "low"] },
+  },
+};
+
+async function delegate(brief: string, allowedTools: string[]) {
+  const runId = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO subagent_runs (id, brief, status) VALUES ($1, $2, 'running')`,
+    [runId, brief]
+  );
+
+  // A fresh conversation: no parent messages are copied in. The brief is
+  // the *entire* starting context — that's the isolation boundary itself.
+  const transcript = [{ role: "system", content: SUBAGENT_SYSTEM_PROMPT },
+                       { role: "user", content: brief }];
+
+  let result;
+  while (true) {
+    const step = await model.call({ messages: transcript, tools: allowedTools,
+                                     response_schema: SUBAGENT_RETURN_SCHEMA });
+    transcript.push(step.message);
+    publishProgress(runId, { tokenCount: estimateTokens(transcript) }); // UI only
+    if (step.toolCalls?.length) {
+      for (const call of step.toolCalls) transcript.push(await runTool(call));
+      continue;
+    }
+    result = step.structuredOutput; // validated against SUBAGENT_RETURN_SCHEMA
+    break;
+  }
+
+  // The full transcript is persisted for audit/debugging — but it is never
+  // read back into the parent's own message list. Only `result` is.
+  await db.query(
+    `UPDATE subagent_runs SET status = 'done', transcript = $2, token_count = $3
+     WHERE id = $1`,
+    [runId, JSON.stringify(transcript), estimateTokens(transcript)]
+  );
+  return result; // ~200 tokens, regardless of whether the subagent read 3 files or 300
+}
+</code></pre>
+  </div>
+</div>
+
+<h3>Layer D &amp; B — persistence and the progress channel (Postgres + SSE)</h3>
+<div class="code-tabs">
+  <div class="tab-row" role="tablist"><button class="tab-btn active" role="tab">SQL + TypeScript — subagent_runs table and its own SSE endpoint</button></div>
+  <div class="tab-panel">
+<pre><code>-- Extends the messages/tool_calls/agent_runs schema from
+-- "Persisting Conversations and Agent State": a subagent_run is its own
+-- row, linked to the parent run, but its transcript column is never
+-- joined into the parent's own message-history read path.
+CREATE TABLE subagent_runs (
+  id UUID PRIMARY KEY,
+  parent_run_id UUID NOT NULL REFERENCES agent_runs(id),
+  brief TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running', -- running | done | failed
+  transcript JSONB,       -- full isolated conversation, audit-only
+  token_count INT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+// This channel is deliberately separate from the parent's own token-stream
+// SSE endpoint (see "Streaming Agent Output to the Browser" for the
+// reconnect/backpressure mechanics that endpoint needs) — it carries
+// status for a human watching the UI, and nothing here is ever read by
+// the parent model.
+app.get("/subagent-runs/:id/events", (req, res) => {
+  res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+  const unsubscribe = subscribeProgress(req.params.id, (evt) => {
+    res.write(`data: ${JSON.stringify(evt)}\n\n`);
+  });
+  req.on("close", unsubscribe);
+});
+</code></pre>
+  </div>
+</div>
+<p>The frontend side is a small consumer of that channel: a collapsed card per <code>run_id</code> showing live token count and status, expandable on click to fetch the persisted <code>transcript</code> for debugging — the same shape as this session's own subagent cards, which show a final report by default and the full transcript only if you ask.</p>
+
+<h2><span class="sec">§4</span> Failure modes</h2>
+<div class="failure">
+<div class="hd">What you'll actually see in production</div>
+<ol>
+<li><strong>The return schema has nowhere to put a caveat.</strong> Symptom: the parent proceeds as if a finding applies uniformly (e.g., "the migration touches these 12 files") when the subagent's own isolated transcript — visible only if you go pull it from <code>subagent_runs</code> — shows it noticed the finding only holds for v2 routes. The schema's <code>caveats</code> field is what prevents this; a return shape with only a flat <code>files</code> array has no slot for that fact to survive into, so it silently doesn't.</li>
+<li><strong>No dedup across subagent spawns.</strong> Symptom: a run's cost dashboard shows several subagent invocations with near-identical tool-call fingerprints — same grep pattern, same files opened — inside one parent session, because nothing checked whether an equivalent brief had already been answered. Isolation controls what re-enters the parent's context; it does nothing about redundant work happening in parallel disposable contexts unless the harness also caches by brief.</li>
+<li><strong>Unschemaed, free-text returns.</strong> Symptom: intermittent parsing failures or a silently wrong file path extracted downstream, non-deterministic across otherwise-identical runs, because the parent is regex-matching a subagent's prose ("I found the migration in 3 files, located at...") instead of reading a validated field. The fix is forcing structured output on the return, not on the subagent's internal reasoning.</li>
+<li><strong>The brief is the parent's entire transcript, not a scoped summary.</strong> Symptom: the subagent's own persisted <code>token_count</code> is nearly as large as the parent's would have been, and its final answer starts contradicting its own early tool calls — the exact turn-6-buried-under-turn-24 failure from the cold open, just relocated one level down. Handing over "everything, to be safe" defeats the boundary; the brief has to be a deliberately scoped statement of what the subagent needs to know, not a context dump.</li>
+</ol>
+</div>
+
+<aside class="judgment">
+<div class="hd">Principal's Judgment Call — delegate vs. do it inline</div>
+<p>Reach for a subagent when the work is bulky and disposable and distills to a small, typed answer — "does X exist anywhere in this repo," "read these 40 files and tell me which ones import this module," a search whose raw output the parent will never need again once it has the conclusion. The isolation is worth the round-trip precisely because what's being isolated is noise relative to the parent's actual decision-making.</p>
+<p>Stay inline when the next step needs the full reasoning trail, not just its conclusion — a derivation the parent (or a human reviewing the trace) must audit step by step, where compressing it into a summary field would be the same information loss the schema is supposed to prevent. Also stay inline when the task is small enough that a fresh-context spawn's setup cost and latency exceed just doing the three tool calls directly; a subagent for "read one file" is machinery solving a problem you don't have.</p>
+</aside>
+
+<h2><span class="sec">§5</span> Try it in 20 minutes</h2>
+<div class="block">
+<div class="hd">LAB · Estimated 20 minutes</div>
+<p><strong>Mission:</strong> prove that the parent's own context size is independent of how much a delegated subagent reads, and that the isolated work is still fully recoverable for debugging.</p>
+<ol>
+<li>Stand up the §3 <code>subagent_runs</code> table and the <code>delegate()</code> function, with a real tool that greps a local directory of ~50 files for a string.</li>
+<li>Call <code>delegate("find every file that imports the 'legacy-auth' module", ["grep", "read_file"])</code> against a small test repo where 3 files match, and record the parent transcript's token count afterward.</li>
+<li>Add 40 more files to the test repo that also match, and call <code>delegate()</code> again with the identical brief. Confirm the parent transcript's token count is the same as step 2 — only the subagent's own <code>token_count</code> in the database grew.</li>
+<li>Query <code>SELECT token_count, transcript FROM subagent_runs ORDER BY created_at DESC LIMIT 1;</code> and confirm the full isolated tool-call history is there even though none of it appears in the parent's own message list.</li>
+<li>Open <code>curl -N localhost:3000/subagent-runs/&lt;id&gt;/events</code> while a new delegate call runs and confirm progress events stream live, independent of the parent's own output stream.</li>
+</ol>
+<p><strong>Acceptance criteria:</strong></p>
+<ul>
+<li>✅ Parent transcript token count is identical whether the subagent's matches were 3 or 43.</li>
+<li>✅ <code>subagent_runs.transcript</code> contains the full isolated tool-call history for later debugging.</li>
+<li>✅ The SSE progress channel emits events during a live delegate call, independently of the parent's own token stream.</li>
+</ul>
+</div>
+
+<h2><span class="sec">§6</span> Design-review question</h2>
+<div class="block">
+<div class="hd">Staff+ interview / design-review bank</div>
+<p><strong>A teammate proposes skipping subagents and just running compaction more aggressively whenever the parent's context grows past a threshold. When is context isolation strictly better than compaction, when is compaction sufficient on its own, and would you ever want both?</strong></p>
+<p><em>Strong answer sketch: compaction and isolation solve different failure surfaces. Compaction, covered in <a href="context-compaction-for-long-running-agents.html">Compaction for Long-Running Agents</a>, is about a single agent's own accumulated reasoning history — decisions made, approaches rejected, constraints discovered — and it's lossy by construction because it summarizes real information the agent may still need. That's the right tool when the thing growing too large <em>is</em> the reasoning trail itself and there's no way around eventually needing a compressed version of it. Isolation is different in kind: it targets work that was never part of the reasoning trail to begin with — a bulk search, a wide read, an exploration whose raw form the parent never needed even once. Routing that through a subagent means it's never in the history compaction would later have to lossily summarize; the caveats field in the return schema is a deliberate one-time compression decision made by whoever designed the contract, not an automatic, best-effort summarization pass run under token pressure. The two compose rather than compete on a long-running session: subagents keep bulky one-off exploration out of the parent's history entirely, and compaction still has to handle the parent's own genuinely long-running reasoning thread once enough turns accumulate even with every disposable side-quest isolated out. Using compaction alone to cover for missing isolation just means the exploration's noise sat in the context for however many turns until the next compaction pass caught it — which is exactly the turn-6-buried-under-turn-24 failure the cold open describes.</em></p>
+</div>
+
+<h2><span class="sec">§7</span> Further reading</h2>
+<ul>
+<li><a href="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic — How We Built Our Multi-Agent Research System</a> (the production case study behind the lead-agent/subagent split and the context-management lessons that came from getting it wrong first)</li>
+<li><a href="https://code.claude.com/docs/en/agent-sdk/subagents">Claude Agent SDK — Subagents</a> (the fresh-context, tool-scoped, final-message-only return contract this article's Layer C code models)</li>
+<li><a href="https://code.claude.com/docs/en/sub-agents">Claude Code Docs — Create Custom Subagents</a> (the filesystem-config version of the same primitive, including the description-driven auto-delegation this article's <code>delegate()</code> hardcodes explicitly instead)</li>
+<li><a href="https://claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them">Claude by Anthropic — When to Use Multi-Agent Systems (and When Not To)</a> (the cost/latency tradeoffs behind this article's Judgment Call — multi-agent setups spend meaningfully more tokens than a single inline agent)</li>
+</ul>
+<p class="mono" style="font-size:.74rem; color:var(--muted); margin-top:2rem;">AS-OF 2026-07-29 · Stable: the fresh-context, final-message-only return contract is a structural property of how subagents are wired, not an implementation detail likely to change. Worth rechecking: the exact SDK/CLI surface for defining and auto-routing to subagents (config file formats, description-driven delegation) moves faster than the underlying isolation mechanism.</p>
+<p style="margin-top:1.2rem; font-size:.92rem; color:var(--muted);">Builds toward: handoff semantics and the typed proposal boundary (both open in the Pillar 1 backlog — this article's forced-schema return is a narrow instance of both). Pairs with <a href="orchestrator-workers-coordination-tax.html">Orchestrator-Workers and the Coordination Tax</a> for the parallelism axis this article deliberately set aside in favor of the context axis, <a href="context-compaction-for-long-running-agents.html">Compaction for Long-Running Agents</a> for the failure mode isolation prevents rather than cleans up after, and <a href="persisting-conversations-and-agent-state.html">Persisting Conversations and Agent State</a> for the schema <code>subagent_runs</code> extends.</p>
+
+<nav class="pager">
+  <a href="persisting-conversations-and-agent-state.html">← PREV — Persisting Conversations and Agent State</a>
+  <a href="index.html">ALL ARTICLES →</a>
+</nav>
+
+</div>
+<script>
+document.querySelectorAll('.code-tabs').forEach(function (group) {
+  var btns = group.querySelectorAll('.tab-btn');
+  var panels = group.querySelectorAll('.tab-panel');
+  btns.forEach(function (b, i) {
+    b.addEventListener('click', function () {
+      btns.forEach(function (x) { x.classList.remove('active'); });
+      panels.forEach(function (x) { x.hidden = true; });
+      b.classList.add('active');
+      panels[i].hidden = false;
+    });
+  });
+});
+</script>
+</body>
+</html>

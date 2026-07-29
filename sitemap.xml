@@ -73,6 +73,12 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://tseten1996.github.io/daily-ai-news/articles/subagents-as-context-isolation.html</loc>
+    <lastmod>2026-07-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://tseten1996.github.io/daily-ai-news/articles/tool-descriptions-are-prompts.html</loc>
     <lastmod>2026-07-23</lastmod>
     <changefreq>monthly</changefreq>
