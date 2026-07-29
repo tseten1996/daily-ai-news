@@ -8,6 +8,77 @@ run, not yet acted on unless marked otherwise.
 
 Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
 
+## Priority 1 — Failing build / broken CI
+
+14. **CRITICAL, OPEN (found 2026-07-29) — `Deploy to GitHub Pages` has
+    failed on every single run since the workflow was created.** Checked
+    the GitHub Actions API directly (not just local build state, which is
+    all every prior run's STEP 2 health check actually verified): of the
+    18 completed runs of `.github/workflows/deploy-pages.yml` on `main`
+    since 2026-07-17, **18/18 ended in `failure`**, including the run
+    triggered by today's push (`ff310bb`, run
+    [30470223754](https://github.com/tseten1996/daily-ai-news/actions/runs/30470223754)).
+    Every failing run completes in ~2 seconds with `runner_id: 0` and no
+    runner ever assigned — the job is rejected before any step
+    (`checkout`, `configure-pages`, `generate-sitemap.sh`,
+    `upload-pages-artifact`, `deploy-pages`) executes, and no job log is
+    ever produced (`GET .../logs` returns `404` even for today's run).
+    That signature — instant rejection, zero runner, zero log — is not
+    consistent with a bug in the workflow YAML (which matches GitHub's
+    own standard Pages-deploy template: correct `permissions`,
+    `environment: github-pages`, `configure-pages@v5` with
+    `enablement: enabled`). It is consistent with the repository's
+    **GitHub Pages source not being enabled/set to "GitHub Actions" in
+    Settings → Pages** (or Pages being unavailable for this repository's
+    current visibility/plan) — something only a human with repo admin
+    access can fix; no tool available to this agent can read or change
+    repository Settings. **Practical impact: as far as this evidence
+    shows, the site has likely never been successfully published via this
+    workflow, for its entire 12-day existence.** Every prior run's
+    changelog entry describing the site as "live" was going on the
+    presence of the workflow file and local build success, not on
+    confirmed deploy status — that assumption should be treated as
+    unverified until a human confirms Pages is actually configured and a
+    manual `workflow_dispatch` run (or the next push) succeeds.
+    **Recommended fix (for the repo owner, not automatable from here):**
+    GitHub repo → Settings → Pages → Build and deployment → Source, set
+    to "GitHub Actions" if it isn't already; then re-run the workflow
+    (Actions tab → "Deploy to GitHub Pages" → "Re-run all jobs", or push
+    any commit) and confirm it goes green. **Process fix applied this
+    run:** none to the workflow itself (no code-level bug was found to
+    fix, and speculatively editing the YAML without being able to observe
+    a real run's logs risks masking the actual cause). Flagging this as
+    the reason future runs' STEP 2 health check should include checking
+    actual GitHub Actions run status via the API, not just local
+    build/lint — this failure was invisible to 18 consecutive local-only
+    health checks.
+15. **OPEN (found 2026-07-29) — Five open, unmerged, overlapping PRs from
+    prior architecture-review runs, none merged since at least PR #15
+    (merged 2026-07-22 per `main`'s log).** `list_pull_requests` shows 5
+    open PRs against this repo, all authored by prior runs of this same
+    agent: #11 (2026-07-20, SEO tags for `articles/*.html`), #16
+    (2026-07-23, robots.txt/sitemap.xml — **targets the stale branch
+    `claude/daily-ai-trends-tutorial-txft7z`, not `main`, and duplicates
+    work already shipped on `main` since 2026-07-18**), #20 (2026-07-26,
+    sitemap CI fix), #22 (2026-07-27, SEO tags for `index.html` +
+    `manual/*.html`), #23 (2026-07-28, SEO tags for `index.html` + the
+    Field Manual — **overlaps #22 almost exactly, one day apart**). None
+    have been merged or closed. Because nothing merges these PRs, each
+    day's fresh run re-orients against `main` (which never received the
+    previous day's proposed fix), re-discovers the same open backlog item
+    (#1, SEO meta tags), and opens yet another overlapping PR proposing
+    a slightly different slice of the same work — at least 3 separate
+    unmerged attempts now exist at "add SEO tags to `index.html` +
+    `manual/*.html`" alone (the stranded commit `191069d`/PR #17, PR #22,
+    PR #23). This is pure wasted work and a process gap, not a code
+    problem: **someone with merge access needs to review and merge (or
+    close, for #16) these 5 PRs**, ideally oldest-first so later ones can
+    be diffed against what actually landed rather than reopening the same
+    diff. Not something this agent can safely resolve unilaterally —
+    merging another run's unreviewed PR without human sign-off, or
+    closing PRs it didn't open, is outside this agent's authority. Recommend the repo owner triage these 5 PRs before the next scheduled
+    run, or the pileup will keep growing by one PR/day.
+
 ## Priority 5 — SEO
 
 1. **PARTIALLY ADDRESSED (2026-07-17) for new content only** — No SEO
@@ -28,7 +99,12 @@ Status legend: `OPEN` (not started) · `IN PROGRESS` · `DONE` (date + PR).
    yet. High value, low risk — likely needs splitting: (a) add real
    `<meta description>` + canonical + OG/Twitter tags per page first
    (small, mechanical, ~10 files/run), (b) add JSON-LD Article schema per
-   article/module page as a follow-up slice. **Note (2026-07-25):** PR #11
+   article/module page as a follow-up slice. **Note (2026-07-29): do not
+   pick this item up again until item 15's PR pileup is resolved.** Three
+   separate unmerged attempts already exist (PR #11 for `articles/*.html`;
+   PR #22 and PR #23, one day apart, both for `index.html` +
+   `manual/*.html`) — a fourth attempt this run would only add a fourth
+   overlapping diff nobody has merged. **Note (2026-07-25):** PR #11
    ("Add real SEO meta tags to Articles pages", open since 2026-07-20,
    targets `main`) already proposes this for `articles/*.html`. A future
    run picking up slice (a) should check whether #11 has merged first and

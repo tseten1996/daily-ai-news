@@ -1,28 +1,36 @@
 # Roadmap
 
-Last reviewed: 2026-07-25. The 2026-07-22 CI check (verify-only,
-missing-entries-only) still let sitemap staleness recur a third time and
-missed a second class of drift (stale `<lastmod>` dates) entirely.
-Replaced the hand-maintained `sitemap.xml` with a generator
-(`scripts/generate-sitemap.sh`) wired into `deploy-pages.yml`, so the
-live sitemap can no longer go stale regardless of what's committed
-(backlog #2). The Immediate items below are otherwise unchanged from the
-2026-07-22 review, with one addition: PR #11 (open since 2026-07-20)
-already covers the `articles/*.html` slice of the SEO-meta-tags item.
+Last reviewed: 2026-07-29. Two critical findings this run, both blocking
+and neither fixable by this agent — see backlog items 14 and 15. They now
+lead "Immediate" ahead of everything else, including the previously-top
+SEO item, which should stay paused until item 15 is resolved (three
+separate unmerged PRs already propose overlapping slices of it).
 
 ## Immediate (next 1-3 runs)
 
-- **Add real SEO meta tags per page** (backlog #1, slice a): unique
+- **[BLOCKED on repo owner] Fix `Deploy to GitHub Pages`** (backlog #14):
+  18/18 runs of this workflow have failed on `main` since it was created
+  12 days ago — the site has likely never successfully deployed. Root
+  cause is almost certainly GitHub repo Settings → Pages not having
+  "GitHub Actions" selected as the source (or Pages being unavailable for
+  this repo). No agent-accessible tool can read or fix repo Settings; a
+  human needs to check Settings → Pages and re-run the workflow. This
+  outranks every other item below until confirmed fixed.
+- **[BLOCKED on repo owner] Triage the 5 open, unmerged PRs** (backlog
+  #15): #11, #16, #20, #22, #23 — several duplicate each other. Nothing
+  merges automatically in this repo's workflow; a human needs to
+  review/merge/close them, oldest first, before any future run picks up
+  another slice of the same backlog items and adds PR #6 to the pile.
+- **Add real SEO meta tags per page** (backlog #1, slice a) — **paused**
+  until item 15 clears. `index.html` and `manual/*.html` already have two
+  separate unmerged attempts in flight (PR #22, PR #23); `articles/*.html`
+  has one (PR #11). Re-attempting this before those are triaged just adds
+  a fourth overlapping diff. Once triaged: unique
   `<meta name="description">`, `rel="canonical"`, Open Graph, and Twitter
-  Card tags on `index.html`, `articles/*.html`, and `manual/*.html` (now
-  16 pages total). PR #11 (open since 2026-07-20) already proposes this
-  for the 7 `articles/*.html` files — check whether it has merged before
-  picking this up; if it has, scope to the remaining `index.html` +
-  `manual/*.html` (9 files). Mechanical, low-risk, high-value. Unaffected
-  by the Astro pilot, which only covers new Articles-stream content going
-  forward.
+  Card tags are still needed across all ~16 pages.
 - **Fix Trends Board heading hierarchy** (backlog #4): confirm intended
-  outline, close the h2→h4 gap.
+  outline, close the h2→h4 gap. Not blocked by the above — safe to pick up
+  next if items 14/15 aren't yet resolved when a future run lands.
 - **Wire `site/` into CI/deploy, or decide not to.** Now that the pilot's
   history is reconciled into `main`, it needs an owner decision: either
   add a real build step to `.github/workflows/deploy-pages.yml` (deciding

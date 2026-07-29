@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Last reviewed: 2026-07-25 (sitemap staleness recurred a third time; replaced the hand-maintained `sitemap.xml` with a generator wired into deploy — see backlog #2)
+Last reviewed: 2026-07-29 (found `Deploy to GitHub Pages` has failed on all 18/18 runs since it was created — see backlog #14; the "Legacy site: deployed via..." claim below has not been true in practice for the workflow's entire history)
 
 ## What this repository is
 
@@ -139,9 +139,15 @@ card-rendering script; module pages' tab-switching JS).
 
 ## Build & deploy pipeline
 
-**Legacy site:** deployed via `.github/workflows/deploy-pages.yml`, which
-uploads the entire repo root to GitHub Pages on push to `main` — no lint
-or type-check, but as of 2026-07-25 it does run one generation step:
+**Legacy site:** intended to deploy via `.github/workflows/deploy-pages.yml`
+on push to `main`, but as of 2026-07-29 **every recorded run of this
+workflow has failed** (18/18 since it was created, including today's push)
+— see `docs/technical-debt/backlog.md` #14. The job fails in ~2 seconds
+with no runner ever assigned, consistent with GitHub Pages not being
+enabled with "GitHub Actions" as its source in repo Settings, not with a
+bug in the workflow file itself. Until a human confirms otherwise, treat
+the legacy site as **not confirmed live** — no lint or type-check either
+way, but as of 2026-07-25 the workflow does run one generation step:
 `scripts/generate-sitemap.sh` regenerates `sitemap.xml` from the
 published pages on disk immediately before the Pages artifact is
 uploaded, so the live sitemap is always correct regardless of what was
