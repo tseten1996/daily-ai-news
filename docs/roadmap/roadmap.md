@@ -1,26 +1,27 @@
 # Roadmap
 
-Last reviewed: 2026-07-25. The 2026-07-22 CI check (verify-only,
-missing-entries-only) still let sitemap staleness recur a third time and
-missed a second class of drift (stale `<lastmod>` dates) entirely.
-Replaced the hand-maintained `sitemap.xml` with a generator
-(`scripts/generate-sitemap.sh`) wired into `deploy-pages.yml`, so the
-live sitemap can no longer go stale regardless of what's committed
-(backlog #2). The Immediate items below are otherwise unchanged from the
-2026-07-22 review, with one addition: PR #11 (open since 2026-07-20)
-already covers the `articles/*.html` slice of the SEO-meta-tags item.
+Last reviewed: 2026-07-27. Added real SEO meta tags (description,
+canonical, OG, Twitter, JSON-LD) to `index.html` and all 7
+`manual/*.html` files (backlog #1). Discovered in the process: PR #17
+(SEO tags for `index.html` + old Articles pages) merged into the wrong
+base branch, not `main` — a second occurrence of the exact bug backlog
+#13 already fixed once for the Astro pilot. New backlog item #14 tracks
+the pattern; a human decision is needed on PR #11 vs. the stranded PR #17
+before `articles/*.html`'s meta tags (the remaining slice of #1) can be
+added without a third collision.
 
 ## Immediate (next 1-3 runs)
 
-- **Add real SEO meta tags per page** (backlog #1, slice a): unique
-  `<meta name="description">`, `rel="canonical"`, Open Graph, and Twitter
-  Card tags on `index.html`, `articles/*.html`, and `manual/*.html` (now
-  16 pages total). PR #11 (open since 2026-07-20) already proposes this
-  for the 7 `articles/*.html` files — check whether it has merged before
-  picking this up; if it has, scope to the remaining `index.html` +
-  `manual/*.html` (9 files). Mechanical, low-risk, high-value. Unaffected
-  by the Astro pilot, which only covers new Articles-stream content going
-  forward.
+- **Resolve PR #11 vs. the stranded PR #17 for `articles/*.html`**
+  (backlog #1 remaining slice, #14): both propose SEO meta tags for
+  overlapping-but-different subsets of the 14 published article pages,
+  and neither reflects the current file set. Needs a human (or a future
+  run explicitly scoped to this) to close/rebase one and write a single
+  fresh pass over all 14 files — not a merge of either as-is.
+- **Investigate root cause of backlog #14** (PRs landing on
+  `claude/daily-ai-trends-tutorial-txft7z` instead of `main`): grep the
+  repo and any PR-authoring tooling/templates for hardcoded references to
+  that branch name. Recurred twice now across unrelated task types.
 - **Fix Trends Board heading hierarchy** (backlog #4): confirm intended
   outline, close the h2→h4 gap.
 - **Wire `site/` into CI/deploy, or decide not to.** Now that the pilot's
